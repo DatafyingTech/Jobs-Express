@@ -2,7 +2,7 @@ import { h, mount } from './dom.js';
 import { icon } from './icons.js';
 import { S, on, saveDraft, resetDraft, loadInfo, clone, markDirty } from './state.js';
 import { PUT } from './api.js';
-import { button, guard, toast, field, preflightPanel, warningsCard, numberInput } from './components.js';
+import { button, guard, toast, field, preflightPanel, warningsCard, numberInput, emptyState } from './components.js';
 import { aboutSection, prefsSection, honestSection } from './forms.js';
 import { go } from './router.js';
 
@@ -75,7 +75,7 @@ function answersPanel() {
       h('div', { class: 'fieldset' }, h('p', { class: 'lede', style: { marginBottom: 0 } }, 'Answers you gave on the Needs your input page. Agents use these word for word whenever the same question comes up again. Remove one to be asked again.')),
       qa.length
         ? qa.map((x) => h('div', { class: 'qa-row' }, h('div', {}, h('div', { class: 'q' }, x.q), h('div', { class: 'a' }, x.a)), button({ icon: 'trash', kind: 'ghost', size: 'sm', title: 'Remove this answer', onClick: () => remove(x) })))
-        : h('div', { class: 'empty' }, h('p', { class: 'muted' }, 'Nothing saved yet.')));
+        : emptyState({ iconName: 'inbox', title: 'Nothing saved yet', body: 'When an agent cannot answer a question honestly, it shows up in Needs your input. Your answer is saved here and reused.', action: button({ label: 'Go to Needs your input', size: 'sm', onClick: () => go('/input') }) }));
   }
   draw();
   return host;

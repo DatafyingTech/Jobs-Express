@@ -38,6 +38,7 @@ const P = {
   circle: '<circle cx="12" cy="12" r="8" stroke-dasharray="2.5 3.5"/>',
   send: '<path d="M4 12l16-8-6 16-2.5-6.5z"/>',
   hold: '<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>',
+  monitor: '<rect x="3.5" y="4.5" width="17" height="12" rx="2"/><path d="M8 20.5h8M12 16.5v4"/>',
   skip: '<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
 };
 

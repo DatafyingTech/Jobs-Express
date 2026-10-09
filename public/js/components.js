@@ -37,8 +37,9 @@ export function field(label, control, { hint, required, span, id } = {}) {
   const fid = id || target?.id || nextId();
   if (target && !target.id) target.id = fid;
   if (target && hint) target.setAttribute('aria-describedby', `${fid}-hint`);
+  if (target && required === true) target.setAttribute('aria-required', 'true');
   return h('div', { class: `field ${span ? 'span-2' : ''}` },
-    label ? h('label', { for: fid }, label, required === false ? h('span', { class: 'req' }, ' (optional)') : null) : null,
+    label ? h('label', { for: fid }, label, required === false ? h('span', { class: 'req' }, ' (optional)') : required === true ? h('span', { class: 'req' }, 'Required') : null) : null,
     control,
     hint ? h('div', { class: 'hint', id: `${fid}-hint` }, hint) : null,
   );
@@ -56,8 +57,8 @@ export function textInput(path, { type = 'text', placeholder, autocomplete, inpu
   return bindInput(h('input', { class: 'input', type, value: get(S.draft, path) ?? '', placeholder, autocomplete, inputmode }), path);
 }
 
-export function textArea(path, { placeholder, rows = 3 } = {}) {
-  const el = h('textarea', { class: 'textarea', rows, placeholder });
+export function textArea(path, { placeholder, rows = 3, label } = {}) {
+  const el = h('textarea', { class: 'textarea', rows, placeholder, 'aria-label': label });
   el.value = get(S.draft, path) ?? '';
   return bindInput(el, path);
 }
@@ -74,15 +75,23 @@ export function selectInput(path, options) {
   return el;
 }
 
-export function numberInput(path, { placeholder, prefix } = {}) {
-  const el = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder, value: get(S.draft, path) === '' ? '' : String(get(S.draft, path) ?? '') });
+const fmt = (v) => (v === '' || v == null ? '' : Number(v).toLocaleString('en-US'));
+
+/** A whole-number field. Shows thousands separators once you leave it. Optional $ prefix and a suffix like "per year". */
+export function numberInput(path, { placeholder, prefix, suffix, label, grouped = false } = {}) {
+  const el = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder, 'aria-label': label });
+  el.value = grouped ? fmt(get(S.draft, path)) : String(get(S.draft, path) ?? '');
   el.addEventListener('input', () => {
     const digits = el.value.replace(/[^\d]/g, '');
     set(S.draft, path, digits === '' ? '' : Number(digits));
     markDirty();
   });
-  if (!prefix) return el;
-  return h('div', { class: 'input-affix' }, h('span', { class: 'affix', 'aria-hidden': 'true' }, prefix), el);
+  if (grouped) el.addEventListener('blur', () => { el.value = fmt(get(S.draft, path)); });
+  if (!prefix && suffix == null) return el;
+  const suffixEl = suffix != null ? h('span', { class: 'suffix', 'aria-hidden': 'true' }, suffix) : null;
+  const wrap = h('div', { class: `input-affix ${suffixEl ? 'has-suffix' : ''}` }, prefix ? h('span', { class: 'affix', 'aria-hidden': 'true' }, prefix) : null, el, suffixEl);
+  wrap.setSuffix = (t) => { if (suffixEl) suffixEl.textContent = t; };
+  return wrap;
 }
 
 /** Toggle chips bound to an array of strings at `path`. */
@@ -222,16 +231,14 @@ export function sampleTag() {
 
 // ---------- warnings ----------
 export function warningsCard() {
-  const item = (ic, strong, text) => h('li', {}, icon(ic, 18), h('span', {}, h('b', {}, strong), ' ', text));
+  const item = (ic, strong, text, cls = '') => h('li', { class: cls }, icon(ic, 18), h('span', {}, h('b', {}, strong), ' ', text));
   return h('section', { class: 'notice', 'aria-labelledby': 'warn-h' },
     h('div', {},
       h('h2', { id: 'warn-h' }, icon('shield', 18), 'Read this once before your first run'),
       h('ul', {},
-        item('user', 'Sign in to LinkedIn yourself,', 'in the same Chrome profile that has the Claude extension. The agents use the browser you are already signed in with, and they never see or type your password.'),
-        item('link', 'Install the Claude in Chrome extension and sign in to it.', 'Then keep that Chrome window open while a run is going.'),
-        item('pause', 'Leave that Chrome profile alone during a run.', 'The agents share it. If you click around in the same window, your clicks and theirs can collide.'),
-        item('lock', 'What it will never do:', 'create accounts, type passwords, click CAPTCHAs, read your email, or message anyone for you. Anything it cannot answer honestly is held for you.'),
-        item('alert', 'LinkedIn\'s terms restrict automation.', 'Your account could be limited. Start with small batches, use Practice mode first, and you are responsible for everything that is submitted in your name.'),
+        item('alert', "LinkedIn's terms restrict automation.", 'Your account could be limited or restricted. Start with small batches, use Practice mode first, and remember you are responsible for everything submitted in your name.', 'lead'),
+        item('user', 'Sign in to LinkedIn yourself,', 'in the same Chrome profile that has the Claude extension installed and signed in. The agents never see or type your password.'),
+        item('monitor', 'Leave that Chrome window alone during a run.', 'The agents share it, so your clicks and theirs can collide. Keep it open until the run finishes.'),
       ),
     ),
   );
@@ -240,16 +247,14 @@ export function warningsCard() {
 // ---------- preflight ----------
 const ROW_ICON = { ok: 'check', warn: 'alert', fail: 'x', pending: 'circle' };
 
-export function preflightPanel({ compact = false } = {}) {
-  const host = h('div', { class: 'panel' });
+export function preflightPanel({ flat = false } = {}) {
+  const host = h('div', { class: flat ? 'flat' : 'panel' });
   const draw = () => {
     const pf = S.preflight;
-    const head = h('div', { class: 'panel-head' },
-      h('h2', {}, 'Requirements'),
-      h('div', { class: 'page-actions' },
-        S.info?.demo ? sampleTag() : null,
-        button({ label: 'Re-check', icon: 'refresh', size: 'sm', onClick: () => guard(loadPreflight), loading: S.preflightLoading })),
-    );
+    const recheck = button({ label: 'Re-check', icon: 'refresh', size: 'sm', onClick: () => guard(loadPreflight), loading: S.preflightLoading });
+    const head = flat
+      ? h('div', { class: 'flat-head' }, h('h3', { class: 'section-title' }, 'Requirements'), recheck)
+      : h('div', { class: 'panel-head' }, h('h2', {}, 'Requirements'), recheck);
     let body;
     if (!pf) {
       body = h('div', { class: 'checks' }, ...Array.from({ length: 6 }, () => h('div', { class: 'check-row' }, h('div', { class: 'skeleton', style: { width: '24px', height: '24px', borderRadius: '12px' } }), h('div', { class: 'skeleton', style: { width: '60%' } }))));

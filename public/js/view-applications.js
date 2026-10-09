@@ -12,7 +12,7 @@ export function applicationsView() {
   let filter = 'all';
   let query = '';
   const host = h('section', { class: 'panel', 'aria-label': 'Applications' });
-  const tabsHost = h('div');
+  const tabsHost = h('div', { class: 'seg-wrap' });
   const tableHost = h('div', { class: 'table-wrap' });
   const search = h('input', { class: 'input', type: 'search', placeholder: 'Search company or role', 'aria-label': 'Search applications', onInput: (e) => { query = e.target.value.toLowerCase(); drawTable(); } });
 
@@ -30,6 +30,11 @@ export function applicationsView() {
 
   function drawTable() {
     if (!S.loaded) { mount(tableHost, h('div', { style: { padding: '24px', display: 'grid', gap: '14px' } }, ...Array.from({ length: 5 }, () => h('div', { class: 'skeleton' })))); return; }
+    const none = !S.apps.length;
+    search.disabled = none;
+    exportBtn.setAttribute('aria-disabled', String(none));
+    exportBtn.style.pointerEvents = none ? 'none' : '';
+    exportBtn.style.opacity = none ? '0.5' : '';
     if (!S.apps.length) {
       mount(tableHost, emptyState({ iconName: 'table', title: 'Nothing here yet', body: 'Every application an agent submits, fills in for review, holds, or skips will be listed here with a link to the posting.', action: button({ label: 'Go to the dashboard', onClick: () => go('/') }) }));
       return;
@@ -44,11 +49,14 @@ export function applicationsView() {
         h('td', { class: 'src c-src' }, sourceName(a.source)),
         h('td', { class: 'c-status' }, statusChip(a.status)),
         h('td', { class: 'when c-when', title: new Date(a.ts).toLocaleString() }, relTime(a.ts)),
-        h('td', { class: 'c-link' }, a.url ? h('a', { href: a.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `Open the ${a.company} posting`, title: 'Open posting' }, icon('external', 16)) : null),
+        h('td', { class: 'c-link' },
+          a.status === 'held' ? button({ label: 'Answer', size: 'sm', onClick: () => go('/input') }) : null,
+          a.url ? h('a', { class: 'open', href: a.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `Open the ${a.company} posting`, title: 'Open posting' }, icon('external', 16), h('span', { class: 'lbl' }, 'Open')) : null),
       )))));
   }
 
-  const toolbar = h('div', { class: 'toolbar' }, tabsHost, h('div', { class: 'page-actions' }, h('div', { class: 'search' }, search), button({ label: 'Export CSV', icon: 'download', size: 'sm', href: csvUrl })));
+  const exportBtn = button({ label: 'Export CSV', icon: 'download', size: 'sm', href: csvUrl });
+  const toolbar = h('div', { class: 'toolbar' }, tabsHost, h('div', { class: 'page-actions' }, h('div', { class: 'search' }, search), exportBtn));
   mount(host, toolbar, tableHost);
   drawTabs();
   drawTable();
@@ -57,7 +65,7 @@ export function applicationsView() {
 
   return {
     el: h('div', {},
-      h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Applications'), h('p', {}, 'Everything the agents have done, newest first. Held rows are waiting on an answer from you.'))),
+      h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Applications'), h('p', {}, 'Everything the agents have done, newest first.'), h('p', { class: 'help-line' }, 'Ready means filled in but not sent: open the posting to review it, then submit it yourself or run Live. Held means a question needs your answer.'))),
       host),
   };
 }

@@ -80,7 +80,23 @@ stand behind.
   export it to CSV.
 - **No dependencies, no build step.** Plain Node and plain browser JavaScript. Read the whole thing in an
   afternoon.
-- **Light and dark themes**, keyboard friendly, works down to phone width.
+- **Light and dark themes**, keyboard friendly, and a proper phone layout (bottom tab bar, tables become cards).
+
+### A closer look
+
+| Setup and requirements | Your honest profile |
+|---|---|
+| ![Setup: the warning and requirement checks](docs/images/01-setup-requirements.png) | ![Your honest profile](docs/images/04-honest-profile.png) |
+
+| A run in progress | Applications and their status |
+|---|---|
+| ![The dashboard during a practice run](docs/images/05-dashboard-live-run.png) | ![The applications table](docs/images/06-applications.png) |
+
+| On a phone | Dark theme |
+|---|---|
+| <img src="docs/images/09-phone-dashboard.png" alt="Phone layout" width="260"> | ![Dark theme](docs/images/08-dashboard-dark.png) |
+
+All sample data, all made up.
 
 ---
 
@@ -262,6 +278,7 @@ the application is held for you.
 node --test            # run the tests (no install step)
 node server.mjs --demo # the UI with sample data
 node tools/record_demo.mjs   # re-render docs/images (Playwright or headless Chrome/Edge, plus ffmpeg for the GIF)
+node tools/check_layout.mjs  # needs Playwright: fails if any page scrolls sideways at 360, 390, 768 or 1440 px
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: [SECURITY.md](SECURITY.md). Changes: [CHANGELOG.md](CHANGELOG.md).

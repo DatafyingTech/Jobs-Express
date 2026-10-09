@@ -29,7 +29,7 @@ export function dashboardView() {
       ),
       h('div', { class: 'd-foot' },
         button({ label: 'Cancel', onClick: () => dlg.close('no') }),
-        button({ label: 'Start live run', kind: 'primary', onClick: () => dlg.close('yes') }),
+        button({ label: 'Start live run', icon: 'alert', kind: 'primary', onClick: () => dlg.close('yes') }),
       ),
     );
     dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'yes'); dlg.remove(); });
@@ -55,6 +55,7 @@ export function dashboardView() {
     const running = run.status === 'running';
     const blk = blockers();
     const perRun = S.info.profile.prefs.perRun;
+    runHost.classList.toggle('live', !running && chosen.mode === 'live');
 
     let controls;
     if (running) {
@@ -70,15 +71,15 @@ export function dashboardView() {
         h('p', { class: 'hint' }, 'Keep the Chrome window open and leave that profile alone until this finishes.'),
       );
     } else {
-      const modeSeg = segmented([{ value: 'practice', label: 'Practice' }, { value: 'live', label: 'Live' }], chosen.mode, (v) => { chosen.mode = v; modeDesc.textContent = MODE_DESC[v]; drawCta(); }, { label: 'Mode' });
+      const modeSeg = segmented([{ value: 'practice', label: 'Practice' }, { value: 'live', label: 'Live' }], chosen.mode, (v) => { chosen.mode = v; modeDesc.textContent = MODE_DESC[v]; runHost.classList.toggle('live', v === 'live'); drawCta(); }, { label: 'Mode' });
       const modeDesc = h('p', { class: 'desc' }, MODE_DESC[chosen.mode]);
       const agentSeg = segmented([1, 2, 3].map((n) => ({ value: n, label: String(n) })), chosen.agents, (v) => { chosen.agents = v; agentDesc.textContent = agentText(v); drawCta(); }, { label: 'Number of agents' });
       const agentDesc = h('p', { class: 'desc' }, agentText(chosen.agents));
       controls = h('div', { class: 'run-controls' },
-        run.status !== 'idle' ? h('div', { class: 'run-state' }, h('span', { class: 'live-dot off' }), h('span', { class: 'muted' }, lastRunText(run))) : null,
+        h('div', { class: 'run-state reserve' }, h('span', { class: 'live-dot off' }), h('span', { class: 'muted' }, run.status !== 'idle' ? lastRunText(run) : 'No runs yet. Start with Practice.')),
         h('div', { class: 'control-row' }, h('div', { class: 'label' }, 'Mode'), h('div', {}, modeSeg, modeDesc)),
         h('div', { class: 'control-row' }, h('div', { class: 'label' }, 'Agents'), h('div', {}, agentSeg, agentDesc)),
-        blk.length ? h('div', { class: 'blockers', role: 'status' }, h('b', {}, 'Before you can start'), h('ul', {}, ...blk.map((b) => h('li', {}, b.text, ' ', h('a', { href: b.href }, b.link))))) : null,
+        blk.length ? h('div', { class: 'blockers', role: 'status' }, h('b', {}, 'Before you can start'), h('ul', {}, ...blk.map((b) => h('li', {}, h('span', {}, b.text), h('a', { href: b.href }, b.link))))) : null,
       );
     }
 
@@ -89,8 +90,10 @@ export function dashboardView() {
         return;
       }
       const startBtn = button({ label: 'Start applying', icon: 'play', kind: 'primary', size: 'lg', disabled: blk.length > 0, onClick: () => start('search') });
-      mount(cta, startBtn,
-        h('small', {}, `${chosen.mode === 'live' ? 'Live' : 'Practice'} · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun} applications`),
+      mount(cta,
+        chosen.mode === 'live' ? h('div', { class: 'live-flag' }, icon('alert', 16), 'Live mode: real applications') : null,
+        startBtn,
+        h('small', {}, blk.length ? 'Finish the items on the left to start.' : chosen.mode === 'live' ? `Live · sends real applications · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun}` : `Practice · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun} applications`),
         S.retryable > 0 ? button({ label: `Re-run ${S.retryable} answered held`, icon: 'refresh', size: 'sm', disabled: blk.length > 0, onClick: () => start('held') }) : null,
       );
     }
@@ -120,9 +123,8 @@ export function dashboardView() {
       pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 28;
       jump.hidden = pinned;
     });
-    const status = h('span', { class: 'faint' });
     const rawBtn = h('label', { class: 'check', style: { alignItems: 'center', fontSize: '13px', color: 'var(--text-2)' } },
-      h('input', { type: 'checkbox', onChange: (e) => { raw = e.target.checked; renderAll(); } }), 'Raw output');
+      h('input', { type: 'checkbox', onChange: (e) => { raw = e.target.checked; renderAll(); } }), 'Show technical steps');
     const collapseBtn = button({ icon: 'chevronU', size: 'sm', kind: 'ghost', title: 'Collapse activity', onClick: () => {
       collapsed = !collapsed;
       body.classList.toggle('collapsed', collapsed);
@@ -135,31 +137,32 @@ export function dashboardView() {
     collapseBtn.setAttribute('aria-expanded', 'true');
     collapseBtn.setAttribute('aria-label', 'Collapse activity');
 
-    const line = (e) => h('div', { class: `log-line ${raw && e.raw ? 'raw' : e.kind}` },
+    const line = (e) => (!raw && e.kind === 'tool') ? null : h('div', { class: `log-line ${raw && e.raw ? 'raw' : e.kind}` },
       h('span', { class: 't' }, clock(e.ts)),
       h('span', { class: 'a' }, e.agent ? `A${e.agent}` : ''),
       h('span', { class: 'm' }, raw && e.raw ? e.raw : e.text));
 
-    const empty = () => h('div', { class: 'log-empty' }, icon('terminal', 24), h('b', { style: { color: 'var(--text-2)' } }, 'Nothing is running'), h('span', {}, 'What the agents are doing shows up here, one line at a time, as soon as you start.'));
+    const empty = () => h('div', { class: 'log-empty' }, h('b', { style: { color: 'var(--text-2)' } }, 'Nothing is running'), h('span', {}, 'What the agents are doing shows up here as soon as you start.'));
 
     function renderAll() {
-      if (!S.log.length) { mount(body, empty()); return; }
+      if (!S.log.length) { mount(body, empty()); el.classList.add('idle'); return; }
       mount(body, ...S.log.map(line));
       if (pinned) body.scrollTop = body.scrollHeight;
+      el.classList.toggle('idle', !S.log.length);
     }
     function add(e) {
-      if (!S.log.length || body.querySelector('.log-empty')) { mount(body); }
-      body.append(line(e));
+      if (body.querySelector('.log-empty')) { mount(body); }
+      el.classList.remove('idle');
+      const node = line(e);
+      if (node) body.append(node);
       while (body.childElementCount > 600) body.firstChild.remove();
       if (pinned) body.scrollTop = body.scrollHeight;
     }
     function reset() { renderAll(); }
-    function setStatus() {
-      status.textContent = S.run.status === 'running' ? 'Live' : S.run.status === 'idle' ? '' : 'Ended';
-    }
+    function setStatus() {}
     const el = h('section', { class: 'panel log-wrap', 'aria-label': 'Live activity' },
       h('div', { class: 'panel-head' },
-        h('h2', {}, h('span', { class: `live-dot ${S.run.status === 'running' ? 'on' : 'off'}`, id: 'log-dot' }), 'Live activity', status),
+        h('h2', {}, h('span', { class: `live-dot ${S.run.status === 'running' ? 'on' : 'off'}`, id: 'log-dot' }), 'Live activity'),
         h('div', { class: 'page-actions' }, rawBtn, collapseBtn)),
       body, jump);
     renderAll();

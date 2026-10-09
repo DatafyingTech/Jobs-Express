@@ -27,6 +27,7 @@ First public release.
 - `tools/log.mjs`, the only way agents record results, with duplicate checking.
 - Runner that starts one `claude -p --chrome` process per agent with a narrow tool allow-list, no connectors other
   than Claude in Chrome, a time cap, a per-agent action cap, and a stop that kills the whole process tree.
-- `tools/record_demo.mjs` to render the screenshots and demo GIF.
+- `tools/record_demo.mjs` to render the screenshots and demo GIF, and `tools/check_layout.mjs` to check every page for sideways scrolling at phone, tablet and desktop widths.
+- A phone layout with a bottom tab bar, stacked cards in place of the table, and a quiet "still needed" note under the setup buttons.
 - Tests for prompts, the log helper, preflight parsers, the profile store, the runner, and the server routes, run in
   CI on Ubuntu, Windows and macOS.

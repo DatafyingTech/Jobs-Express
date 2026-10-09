@@ -58,7 +58,7 @@ export function inputView() {
       h('div', { class: 'panel-head' }, h('h2', {}, 'Questions agents could not answer', open.length ? h('span', { class: 'tag' }, String(open.length)) : null)),
       open.length
         ? open.map(questionItem)
-        : emptyState({ iconName: 'inbox', title: 'You are all caught up', body: 'When an agent reaches a required question your profile does not cover, such as a driver\'s license or drug-test consent, it stops, writes the question here, and moves on to the next job. Your answer is saved so it is never asked twice.' }));
+        : emptyState({ iconName: 'inbox', title: S.held.length ? 'You are all caught up' : 'No questions yet', body: 'When an agent reaches a required question your profile does not cover, such as a driver\'s license or drug-test consent, it stops, writes the question here, and moves on to the next job. Your answer is saved so it is never asked twice.' }));
     mount(doneHost,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Answered')),
       done.length

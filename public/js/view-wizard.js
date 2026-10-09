@@ -1,6 +1,6 @@
-import { h } from './dom.js';
+import { h, mount } from './dom.js';
 import { icon } from './icons.js';
-import { S, saveDraft, resetDraft } from './state.js';
+import { S, on, saveDraft, resetDraft } from './state.js';
 import { button, guard, preflightPanel, warningsCard, toast } from './components.js';
 import { aboutSection, prefsSection, honestSection } from './forms.js';
 import { go } from './router.js';
@@ -44,16 +44,28 @@ export function wizardView(step = 1) {
   }
 
   const last = n === STEPS.length;
+  const note = h('span', { class: 'step-note', role: 'status' });
+  const contBtn = button({ label: 'Continue', kind: 'primary', onClick: () => goStep(n + 1) });
+  const refreshNote = () => {
+    const missing = stepMissing(cur.key, S.draft, S.preflight);
+    note.textContent = missing ? missing : '';
+    if (!last) mount(contBtn, h('span', {}, missing && cur.key === 'welcome' ? 'Continue anyway' : 'Continue'));
+  };
   const foot = h('div', { class: 'wizard-foot' },
     n > 1 ? button({ label: 'Back', icon: null, onClick: () => goStep(n - 1) }) : h('span'),
+    note,
     last
       ? button({ label: 'Save and go to the dashboard', kind: 'primary', icon: 'check', onClick: () => guard(async () => {
         await saveDraft({ complete: true });
-        toast('Saved. You are ready for a practice run.');
+        toast(S.info.gaps.length ? 'Saved. A few things are still missing before you can start.' : 'Saved. You are ready for a practice run.');
         go('/');
       }) })
-      : button({ label: 'Continue', kind: 'primary', onClick: () => goStep(n + 1) }),
+      : contBtn,
   );
+  const wizardBody = h('div', { class: 'wizard-body' });
+  for (const ev of ['input', 'change', 'click']) wizardBody.addEventListener(ev, () => setTimeout(refreshNote, 0));
+  on('preflight', refreshNote);
+  setTimeout(refreshNote, 0);
 
   return {
     el: h('div', {},
@@ -62,27 +74,43 @@ export function wizardView(step = 1) {
       ),
       mobileRail,
       h('div', { class: 'wizard' }, rail,
-        h('div', { class: 'wizard-body' },
+        (wizardBody.append(
           h('div', { class: 'panel' },
             h('div', { class: 'panel-head' }, h('h2', {}, cur.label), h('span', { class: 'faint' }, `Step ${n} of ${STEPS.length}`)),
             ...(Array.isArray(body) ? body : [body]),
             foot,
-          ),
-        ),
+          )), wizardBody),
       ),
     ),
   };
 }
 
 function welcome() {
-  return h('div', { class: 'stack', style: { padding: '24px' } },
-    h('div', {},
-      h('h3', { style: { fontSize: '17px', marginBottom: '6px' } }, 'Parallel agents, your own Chrome, honest answers.'),
-      h('p', { class: 'muted', style: { maxWidth: '64ch' } }, 'Jobs Express opens Claude Code in the background and lets it work in the Chrome you are already signed in to. It finds roles that fit, fills in the forms using only what you tell it here, and holds anything it cannot answer truthfully. First, a quick check that your computer is ready.'),
-    ),
-    preflightPanel(),
+  return h('div', { class: 'stack', style: { padding: 'var(--s5)' } },
+    h('p', { class: 'lede-block' }, 'Jobs Express opens Claude Code in the background and lets it work in the Chrome you are already signed in to. It finds roles that fit, fills in the forms using only what you tell it here, and holds anything it cannot answer truthfully. It never creates accounts, types passwords, clicks CAPTCHAs, reads your email, or messages anyone for you.'),
     warningsCard(),
+    preflightPanel({ flat: true }),
   );
+}
+
+/** One quiet line under the buttons saying what is still missing on this step. Never blocks. */
+export function stepMissing(key, d, pf) {
+  const miss = [];
+  if (key === 'welcome') {
+    const bad = (pf?.rows || []).filter((r) => r.status === 'fail');
+    return bad.length ? `${bad.length} requirement${bad.length > 1 ? 's' : ''} above still need fixing. You can continue and come back.` : '';
+  }
+  if (key === 'about') {
+    if (!d.about.fullName) miss.push('your name');
+    if (!d.about.email) miss.push('your email');
+    if (!d.about.phone) miss.push('your phone number');
+    if (!d.about.resumeName) miss.push('a resume file');
+  } else if (key === 'wants') {
+    if (!d.prefs.categories.length && !d.prefs.customTitles.length) miss.push('at least one category or title');
+  } else if (key === 'honest') {
+    if (!d.honest.skills && !d.honest.titles && !d.honest.summary) miss.push('some facts agents may claim');
+  }
+  return miss.length ? 'Still needed: ' + miss.join(', ') + '.' : '';
 }
 
 function review(goStep) {
@@ -99,7 +127,7 @@ function review(goStep) {
   const gaps = S.info.gaps;
   return h('div', {},
     gaps.length
-      ? h('div', { style: { padding: '24px 24px 0' } }, h('div', { class: 'inline-alert' }, icon('alert', 18), h('div', {}, h('b', {}, 'Still missing: '), gaps.join(', '), '. You can save now and fill these in later from Settings, but the Start button stays locked until they are done.')))
+      ? h('div', { style: { padding: 'var(--s5) var(--s5) 0' } }, h('div', { class: 'inline-alert' }, icon('alert', 18), h('div', {}, h('b', {}, 'Still missing: '), h('span', { class: 'gap-links' }, ...gaps.map((g) => h('a', { href: '#/setup/' + gapStep(g) }, g))), h('div', { class: 'muted' }, 'You can save now and finish later from Settings, but the Start button stays locked until these are done.'))))
       : null,
     block('About you', 2,
       dd('Name', a.fullName), dd('Email', a.email), dd('Phone', a.phone),
@@ -115,4 +143,10 @@ function review(goStep) {
       dd('Skills', hn.skills), dd('Tools', hn.tools), dd('Certifications', hn.certifications || 'None listed'),
       dd('Education', hn.education), dd('Never claim', hn.neverClaim)),
   );
+}
+
+function gapStep(text) {
+  if (/category|title/.test(text)) return 3;
+  if (/facts/.test(text)) return 4;
+  return 2;
 }

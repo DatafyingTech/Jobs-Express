@@ -33,27 +33,34 @@ function toggleTheme() {
 function buildShell() {
   navHost = h('nav', { class: 'nav', 'aria-label': 'Main' });
   mainHost = h('main', { class: 'main', id: 'main', tabindex: '-1' });
+  // The theme toggle and sample-data tag come after <main> in the DOM so keyboard users reach the page first.
   const foot = h('div', { class: 'side-foot', id: 'side-foot' });
   mount(root,
     h('aside', { class: 'side' },
       h('a', { class: 'brand', href: '#/', 'aria-label': 'Jobs Express, dashboard' }, brandMark(32), h('span', {}, h('div', { class: 'brand-name' }, 'Jobs ', h('span', { class: 'brand-thin' }, 'Express')), h('div', { class: 'brand-sub' }, 'Runs on your computer'))),
-      navHost, foot),
-    mainHost);
+      navHost),
+    mainHost, foot);
   drawShellBits();
 }
 
 function drawShellBits() {
   const route = parseRoute();
   const open = S.held.filter((x) => x.open).length || S.info?.openHeld || 0;
+  const firstRun = !!S.info && !S.info.profile.setupComplete && !S.info.demo;
   const items = [
-    ['dashboard', '/', 'Dashboard', 'grid', null],
-    ['applications', '/applications', 'Applications', 'table', S.appCounts.all || null],
-    ['input', '/input', 'Needs your input', 'inbox', open || null],
+    firstRun ? ['setup', '/setup/1', 'Setup', 'shield', null] : null,
+    ['dashboard', '/', 'Dashboard', 'grid', null, firstRun],
+    ['applications', '/applications', 'Applications', 'table', S.appCounts.all || null, firstRun],
+    ['input', '/input', 'Needs your input', 'inbox', open || null, firstRun],
     ['settings', '/settings/requirements', 'Settings', 'sliders', null],
-  ];
-  mount(navHost, ...items.map(([name, path, label, ic, count]) => {
-    const active = route.name === name || (name === 'settings' && route.name === 'setup');
-    return h('a', { class: 'nav-item', href: '#' + path, 'aria-current': active ? 'page' : null }, icon(ic, 18), label,
+  ].filter(Boolean);
+  mount(navHost, ...items.map(([name, path, label, ic, count, locked]) => {
+    const active = route.name === name || (name === 'settings' && route.name === 'setup' && !firstRun);
+    return h('a', {
+      class: `nav-item ${locked ? 'disabled' : ''}`, href: '#' + path, 'aria-current': active ? 'page' : null,
+      'aria-disabled': locked ? 'true' : null, title: locked ? 'Finish setup first' : null,
+      onClick: locked ? (e) => e.preventDefault() : null,
+    }, icon(ic, 18), name === 'input' ? [h('span', { class: 'long' }, label), h('span', { class: 'short' }, 'Needs input')] : h('span', {}, label),
       count ? h('span', { class: `nav-count ${name === 'input' ? 'attn' : ''}`, 'aria-label': `${count} items` }, String(count)) : null);
   }));
   const foot = document.getElementById('side-foot');
@@ -63,8 +70,8 @@ function drawShellBits() {
     S.info?.demo ? sampleTag() : null,
     !S.connected ? h('span', { class: 'sample-tag', style: { color: 'var(--bad)', background: 'var(--bad-soft)' } }, icon('alert', 14), 'Lost connection') : null,
     h('div', { class: 'row' },
-      h('button', { class: 'btn ghost sm', type: 'button', onClick: toggleTheme, 'aria-label': dark ? 'Switch to light theme' : 'Switch to dark theme' }, icon(dark ? 'sun' : 'moon', 16), dark ? 'Light' : 'Dark'),
-      h('span', { class: 'faint' }, `v${S.info?.version || ''}`)));
+      h('button', { class: 'btn ghost sm', type: 'button', onClick: toggleTheme, 'aria-label': dark ? 'Switch to light theme' : 'Switch to dark theme' }, icon(dark ? 'sun' : 'moon', 16), h('span', { class: 'lbl' }, dark ? 'Light' : 'Dark')),
+      h('span', { class: 'faint ver' }, `v${S.info?.version || ''}`)));
 }
 
 // ---------- routing ----------

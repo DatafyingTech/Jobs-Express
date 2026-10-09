@@ -19,17 +19,17 @@ export function aboutSection() {
   return [
     fs('Contact details', 'These go into the standard fields on application forms.',
       h('div', { class: 'grid two' },
-        field('Full name', textInput('about.fullName', { autocomplete: 'name' })),
-        field('Email', textInput('about.email', { type: 'email', autocomplete: 'email' }), { hint: 'Employers reply here. Agents never open your inbox.' }),
-        field('Phone', textInput('about.phone', { type: 'tel', autocomplete: 'tel' })),
+        field('Full name', textInput('about.fullName', { autocomplete: 'name' }), { required: true }),
+        field('Email', textInput('about.email', { type: 'email', autocomplete: 'email' }), { required: true, hint: 'Employers reply here. Agents never open your inbox.' }),
+        field('Phone', textInput('about.phone', { type: 'tel', autocomplete: 'tel' }), { required: true }),
         field('LinkedIn profile URL', textInput('about.linkedin', { placeholder: 'https://www.linkedin.com/in/your-name' }), { required: false }),
-        field('City', textInput('about.city', { autocomplete: 'address-level2' })),
-        field('State or region', textInput('about.state', { autocomplete: 'address-level1' })),
-        field('Country', textInput('about.country', { autocomplete: 'country-name' })),
+        field('City', textInput('about.city', { autocomplete: 'address-level2' }), { required: false }),
+        field('State or region', textInput('about.state', { autocomplete: 'address-level1' }), { required: false }),
+        field('Country', textInput('about.country', { autocomplete: 'country-name' }), { required: false }),
         field('Other links', textInput('about.links', { placeholder: 'GitHub, portfolio, personal site' }), { required: false, hint: 'Separate several with commas.' }),
       ),
     ),
-    fs('Resume', 'Agents upload this exact file when a form asks for one.', resumeDropzone()),
+    fs(['Resume', h('span', { class: 'req' }, 'Required')], 'Agents upload this exact file when a form asks for one.', resumeDropzone()),
     fs('Work authorization', 'Answered the same way on every form, so it has to be true.',
       radioList('about.workAuth', S.info.options.workAuth, 'workauth'),
       h('div', { style: { marginTop: '12px' } }, field('Anything else employers should know?', textInput('about.workAuthNote', { placeholder: 'For example: visa type and expiry' }), { required: false })),
@@ -49,7 +49,7 @@ export function prefsSection() {
   const p = S.draft.prefs;
   const presets = [5, 10, 25];
   const isCustom = !presets.includes(Number(p.perRun));
-  const customWrap = h('div', { style: { display: isCustom ? 'block' : 'none', width: '120px' } }, numberInput('prefs.perRun'));
+  const customWrap = h('div', { style: { display: isCustom ? 'block' : 'none', width: '120px' } }, numberInput('prefs.perRun', { label: 'Applications per run (custom number)' }));
   const perRun = segmented(
     [...presets.map((n) => ({ value: n, label: String(n) })), { value: 'custom', label: 'Custom' }],
     isCustom ? 'custom' : Number(p.perRun),
@@ -63,6 +63,12 @@ export function prefsSection() {
     { label: 'Applications per run' },
   );
 
+  const per = () => `per ${S.draft.prefs.payPeriod === 'hour' ? 'hour' : 'year'}`;
+  const floorInput = numberInput('prefs.payFloor', { prefix: '$', placeholder: '90,000', grouped: true, suffix: per() });
+  const idealInput = numberInput('prefs.payIdeal', { prefix: '$', placeholder: '120,000', grouped: true, suffix: per() });
+  const periodSelect = selectInput('prefs.payPeriod', ['year', 'hour']);
+  periodSelect.addEventListener('change', () => { floorInput.setSuffix(per()); idealInput.setSuffix(per()); });
+
   const sources = h('div', {},
     switchRow({ title: 'LinkedIn Easy Apply', desc: 'Roles with LinkedIn\'s own quick-apply form. Needs you signed in to LinkedIn.', checked: p.sources.linkedin, onChange: (v) => { p.sources.linkedin = v; markDirty(); } }),
     switchRow({ title: 'Company job boards', desc: 'Greenhouse, Ashby, Lever and similar. Agents read each board\'s public listing, then apply on the company\'s own page.', checked: p.sources.ats, onChange: (v) => { p.sources.ats = v; markDirty(); } }),
@@ -70,7 +76,7 @@ export function prefsSection() {
   );
 
   return [
-    fs('What kind of work', 'Pick every category you would take a call about. Add exact titles below for anything that is missing.',
+    fs(['What kind of work', h('span', { class: 'req' }, 'Pick at least one')], 'Pick every category you would take a call about. Add exact titles below for anything that is missing.',
       chipGroup('prefs.categories', S.info.options.categories, { label: 'Job categories' }),
       h('div', { style: { marginTop: '16px' } }, field('Specific job titles', tagInput('prefs.customTitles', { placeholder: 'Type a title and press Enter', label: 'Add a job title' }))),
     ),
@@ -83,9 +89,9 @@ export function prefsSection() {
     ),
     fs('Pay', 'Roles that clearly pay less than your floor are skipped. If a posting does not list pay, agents carry on and record "not listed".',
       h('div', { class: 'grid three' },
-        field('Lowest you would accept', numberInput('prefs.payFloor', { prefix: '$', placeholder: '90000' })),
-        field('Ideal', numberInput('prefs.payIdeal', { prefix: '$', placeholder: '120000' }), { required: false }),
-        field('Per', selectInput('prefs.payPeriod', ['year', 'hour'])),
+        field('Lowest you would accept', floorInput),
+        field('Ideal', idealInput, { required: false }),
+        field('Per', periodSelect),
       ),
     ),
     fs('Leave these out', null,
@@ -126,6 +132,6 @@ export function honestSection() {
       ),
     ),
     fs('Never claim', 'Anything you want to be certain no agent ever says, even if a posting makes it tempting.',
-      field(null, textArea('honest.neverClaim', { rows: 3, placeholder: 'For example: a bachelor\'s degree, managing people, AWS certifications, security clearance' }), { required: false })),
+      field(null, textArea('honest.neverClaim', { label: 'Never claim', rows: 3, placeholder: 'For example: a bachelor\'s degree, managing people, AWS certifications, security clearance' }), { required: false })),
   ];
 }

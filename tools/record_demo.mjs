@@ -10,13 +10,13 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-import { spawnSync, execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createApp } from '../server.mjs';
 import { createStore, ROOT } from '../lib/store.mjs';
 import { seedDemo } from '../lib/demo.mjs';
 import { detectBrowsers } from '../lib/preflight.mjs';
+import { loadPlaywright } from './pw.mjs';
 
 const OUT = path.join(ROOT, 'docs', 'images');
 const W = 1440;
@@ -28,39 +28,15 @@ const SCENES = [
   ['02-about-you', '/?demo=1#/setup/2', { wait: '.dropzone' }],
   ['03-preferences', '/?demo=1#/setup/3', { wait: '.chips' }],
   ['04-honest-profile', '/?demo=1#/setup/4', { wait: '.notice.calm' }],
-  ['05-dashboard-live-run', '/?demo=1&scene=live#/', { wait: '.log-line', min: 14, settle: 1200 }],
+  ['05-dashboard-live-run', '/?demo=1&scene=live#/', { wait: '.log-line', min: 8, settle: 1200 }],
   ['06-applications', '/?demo=1#/applications', { wait: 'table.apps' }],
   ['07-needs-input', '/?demo=1#/input', { wait: '.q-item' }],
-  ['08-dashboard-dark', '/?demo=1&scene=live#/', { wait: '.log-line', min: 14, settle: 1200, dark: true, onlyPlaywright: true }],
+  ['08-dashboard-dark', '/?demo=1&scene=live#/', { wait: '.log-line', min: 8, settle: 1200, dark: true, onlyPlaywright: true }],
+  ['09-phone-dashboard', '/?demo=1&scene=live#/', { wait: '.log-line', min: 6, settle: 1000, phone: true, onlyPlaywright: true }],
+  ['10-phone-applications', '/?demo=1#/applications', { wait: 'table.apps tbody tr', phone: true, onlyPlaywright: true }],
 ];
 
-const GIF_ORDER = ['01-setup-requirements', '02-about-you', '03-preferences', '04-honest-profile', '05-dashboard-live-run', '06-applications', '07-needs-input'];
-
-async function loadPlaywright() {
-  const attempts = [() => import('playwright')];
-  const dirs = [process.env.CJA_PLAYWRIGHT_DIR].filter(Boolean);
-  try {
-    dirs.push(execSync('npm root -g', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim());
-  } catch { /* npm not available */ }
-  for (const d of dirs) {
-    attempts.push(async () => {
-      const req = createRequire(path.join(d, 'noop.js'));
-      return req('playwright');
-    });
-    attempts.push(async () => {
-      const req = createRequire(path.join(d, 'noop.js'));
-      return req(path.join(d, 'node_modules', 'playwright'));
-    });
-  }
-  for (const a of attempts) {
-    try {
-      const m = await a();
-      const pw = m.chromium ? m : m.default;
-      if (pw?.chromium) return pw;
-    } catch { /* try the next one */ }
-  }
-  return null;
-}
+const GIF_ORDER = ['01-setup-requirements', '02-about-you', '03-preferences', '04-honest-profile', '05-dashboard-live-run', '06-applications', '07-needs-input', '09-phone-dashboard', '10-phone-applications'];
 
 async function main() {
   const wantGif = !process.argv.includes('--no-gif');
@@ -83,7 +59,9 @@ async function main() {
       for (const [name, route, o] of SCENES) {
         // The scripted run is global to the demo server, so give each scene a fresh server state.
         await fetch(`${base}/api/run/stop`, { method: 'POST', headers: { 'x-cja': '1' } }).catch(() => {});
-        const ctx = await b.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2, colorScheme: o.dark ? 'dark' : 'light' });
+        const ctx = await b.newContext(o.phone
+          ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' }
+          : { viewport: { width: W, height: H }, deviceScaleFactor: 2, colorScheme: o.dark ? 'dark' : 'light' });
         const page = await ctx.newPage();
         await page.goto(base + route);
         await page.waitForSelector(o.wait, { timeout: 15000 });
@@ -134,7 +112,7 @@ function makeGif(shots) {
     return;
   }
   const byName = Object.fromEntries(shots);
-  const frames = GIF_ORDER.map((n) => byName[n]).filter(Boolean);
+  let frames = GIF_ORDER.map((n) => byName[n]).filter(Boolean);
   if (frames.length < 2) return;
   const hold = 2.6;
   const fade = 0.5;
@@ -143,7 +121,16 @@ function makeGif(shots) {
   const args = ['-y', '-loglevel', 'error'];
   for (const f of frames) args.push('-loop', '1', '-t', String(hold + fade), '-i', f);
   // Scale every frame, cross-fade them one after another, then build a proper palette.
-  let filter = frames.map((_, i) => `[${i}:v]scale=${outW}:-2:flags=lanczos,fps=12,format=yuv420p[v${i}]`).join(';');
+  const outH = Math.round(outW * (H / W));
+  // Phone screenshots are portrait: centre each on a desktop-shaped canvas first, one file at a time.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cja-gif-'));
+  frames = frames.map((f, i) => {
+    if (!path.basename(f).includes('phone')) return f;
+    const padded = path.join(tmp, `phone-${i}.png`);
+    const r0 = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', f, '-vf', `scale=-2:${outH * 2},pad=${outW * 2}:${outH * 2}:(ow-iw)/2:0:color=0xf5f4f1`, '-frames:v', '1', padded], { encoding: 'utf8' });
+    return r0.status === 0 ? padded : f;
+  });
+  let filter = frames.map((_, i) => `[${i}:v]scale=${outW}:${outH}:flags=lanczos,fps=12,format=yuv420p[v${i}]`).join(';');
   let last = 'v0';
   frames.slice(1).forEach((_, i) => {
     const n = i + 1;
@@ -154,7 +141,9 @@ function makeGif(shots) {
   filter += `;[${last}]split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4[out]`;
   args.push('-filter_complex', filter, '-map', '[out]', '-loop', '0', out);
   const r = spawnSync('ffmpeg', args, { encoding: 'utf8' });
+  fs.rmSync(tmp, { recursive: true, force: true });
   if (r.status !== 0) {
+    if (process.env.CJA_DEBUG) console.log(args.join(' '));
     console.log('ffmpeg could not assemble the GIF (screenshots are still in docs/images/):', (r.stderr || '').slice(0, 400));
     return;
   }
