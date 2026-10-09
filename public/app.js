@@ -59,7 +59,7 @@ function drawShellBits() {
     return h('a', {
       class: `nav-item ${locked ? 'disabled' : ''}`, href: '#' + path, 'aria-current': active ? 'page' : null,
       'aria-disabled': locked ? 'true' : null, title: locked ? 'Finish setup first' : null,
-      onClick: locked ? (e) => e.preventDefault() : null,
+      onClick: locked ? (e) => { e.preventDefault(); toast('Finish setup first. It takes a few minutes.'); } : null,
     }, icon(ic, 18), name === 'input' ? [h('span', { class: 'long' }, label), h('span', { class: 'short' }, 'Needs input')] : h('span', {}, label),
       count ? h('span', { class: `nav-count ${name === 'input' ? 'attn' : ''}`, 'aria-label': `${count} items` }, String(count)) : null);
   }));

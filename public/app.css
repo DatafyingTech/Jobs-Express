@@ -273,6 +273,8 @@ svg { flex: none; }
 .chip[aria-pressed="true"] svg { display: block; }
 .chip.removable { cursor: default; background: var(--surface-3); border-color: transparent; color: var(--text); }
 .chip.removable button { all: unset; display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--pill); cursor: pointer; color: var(--text-3); }
+.chip.removable button { position: relative; }
+.chip.removable button::after { content: ""; position: absolute; inset: -8px; }
 .chip.removable button:hover { background: var(--border-strong); color: var(--text); }
 .chip.removable button:focus-visible { outline: 2px solid var(--accent); }
 
@@ -474,7 +476,7 @@ table.apps { width: 100%; border-collapse: collapse; }
 .apps .pay { white-space: nowrap; color: var(--text-2); }
 .apps .when { white-space: nowrap; color: var(--text-3); }
 .apps .src { color: var(--text-2); white-space: nowrap; }
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .apps thead { display: none; }
   .apps, .apps tbody, .apps tr, .apps td { display: block; width: 100%; }
   .apps tr { padding: 12px var(--s4); border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s3); }
@@ -543,7 +545,6 @@ code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-3)
 
 /* ---------- additions ---------- */
 .req { font-size: 12px; font-weight: 600; color: var(--text-3); margin-left: var(--s2); text-transform: uppercase; letter-spacing: 0.05em; }
-.notice .lead { border-left: 3px solid var(--warn); padding-left: var(--s3); }
 .notice .lead svg { color: var(--warn); }
 .notice .lead b { color: var(--text); }
 .lede-block { color: var(--text-2); max-width: 64ch; }
@@ -551,7 +552,7 @@ code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-3)
 .flat-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s2); }
 .flat-head .section-title { margin: 0; }
 .flat .check-row { padding-left: 0; padding-right: 0; }
-.run-panel.live .run-cta { background: var(--warn-soft); box-shadow: inset 0 3px 0 var(--warn); }
+.run-panel.live .run-cta { background: var(--warn-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent); }
 .run-panel.live .run-cta small { color: var(--warn); font-weight: 600; }
 .live-flag { display: inline-flex; align-items: center; gap: var(--s2); color: var(--warn); font-weight: 650; }
 .run-state.reserve { min-height: 28px; }
@@ -583,4 +584,18 @@ code { font-family: var(--mono); font-size: 0.92em; background: var(--surface-3)
   .wizard-foot .btn.primary { flex: 1 1 100%; }
   .wizard-foot { flex-direction: column-reverse; align-items: stretch; }
   .wizard-foot .step-note { max-width: none; }
+}
+
+/* phone polish */
+@media (max-width: 600px) {
+  .seg-wrap { overflow: visible; }
+  .seg-wrap .seg { display: flex; flex-wrap: wrap; width: 100%; }
+  .seg-wrap .seg button { flex: 1 1 auto; justify-content: center; }
+  .savebar { flex-direction: column; align-items: stretch; }
+  .savebar .page-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+@media (pointer: coarse) {
+  .check input { width: 24px; height: 24px; margin-top: 0; }
+  .btn.sm.icon-only { min-width: 40px; }
+  .chip.removable button { width: 28px; height: 28px; }
 }

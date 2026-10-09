@@ -36,7 +36,8 @@ const SCENES = [
   ['10-phone-applications', '/?demo=1#/applications', { wait: 'table.apps tbody tr', phone: true, onlyPlaywright: true }],
 ];
 
-const GIF_ORDER = ['01-setup-requirements', '02-about-you', '03-preferences', '04-honest-profile', '05-dashboard-live-run', '06-applications', '07-needs-input', '09-phone-dashboard', '10-phone-applications'];
+// The loop opens on the strongest image, the dashboard mid-run, then walks through setup and results, then the phone.
+const GIF_ORDER = ['05-dashboard-live-run', '01-setup-requirements', '03-preferences', '04-honest-profile', '06-applications', '07-needs-input', '09-phone-dashboard', '10-phone-applications'];
 
 async function main() {
   const wantGif = !process.argv.includes('--no-gif');
@@ -117,19 +118,20 @@ function makeGif(shots) {
   const hold = 2.6;
   const fade = 0.5;
   const outW = 1000;
-  const out = path.join(OUT, 'demo.gif');
-  const args = ['-y', '-loglevel', 'error'];
-  for (const f of frames) args.push('-loop', '1', '-t', String(hold + fade), '-i', f);
-  // Scale every frame, cross-fade them one after another, then build a proper palette.
   const outH = Math.round(outW * (H / W));
-  // Phone screenshots are portrait: centre each on a desktop-shaped canvas first, one file at a time.
+  const out = path.join(OUT, 'demo.gif');
+  // Phone screenshots are portrait. Scale them by height only and centre them on a desktop-shaped canvas
+  // (2x size, same background colour as the app) BEFORE they become ffmpeg inputs, so they are never stretched.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cja-gif-'));
   frames = frames.map((f, i) => {
     if (!path.basename(f).includes('phone')) return f;
     const padded = path.join(tmp, `phone-${i}.png`);
     const r0 = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', f, '-vf', `scale=-2:${outH * 2},pad=${outW * 2}:${outH * 2}:(ow-iw)/2:0:color=0xf5f4f1`, '-frames:v', '1', padded], { encoding: 'utf8' });
-    return r0.status === 0 ? padded : f;
+    if (r0.status !== 0) throw new Error('Could not pad a phone frame: ' + (r0.stderr || '').slice(0, 300));
+    return padded;
   });
+  const args = ['-y', '-loglevel', 'error'];
+  for (const f of frames) args.push('-loop', '1', '-t', String(hold + fade), '-i', f);
   let filter = frames.map((_, i) => `[${i}:v]scale=${outW}:${outH}:flags=lanczos,fps=12,format=yuv420p[v${i}]`).join(';');
   let last = 'v0';
   frames.slice(1).forEach((_, i) => {

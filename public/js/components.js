@@ -39,7 +39,7 @@ export function field(label, control, { hint, required, span, id } = {}) {
   if (target && hint) target.setAttribute('aria-describedby', `${fid}-hint`);
   if (target && required === true) target.setAttribute('aria-required', 'true');
   return h('div', { class: `field ${span ? 'span-2' : ''}` },
-    label ? h('label', { for: fid }, label, required === false ? h('span', { class: 'req' }, ' (optional)') : required === true ? h('span', { class: 'req' }, 'Required') : null) : null,
+    label ? h('label', { for: fid }, label, required === true ? h('span', { class: 'req' }, 'Required') : null) : null,
     control,
     hint ? h('div', { class: 'hint', id: `${fid}-hint` }, hint) : null,
   );

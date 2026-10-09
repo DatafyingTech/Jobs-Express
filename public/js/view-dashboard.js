@@ -93,7 +93,7 @@ export function dashboardView() {
       mount(cta,
         chosen.mode === 'live' ? h('div', { class: 'live-flag' }, icon('alert', 16), 'Live mode: real applications') : null,
         startBtn,
-        h('small', {}, blk.length ? 'Finish the items on the left to start.' : chosen.mode === 'live' ? `Live · sends real applications · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun}` : `Practice · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun} applications`),
+        h('small', {}, blk.length ? 'Finish the items on the left to start.' : chosen.mode === 'live' ? `Live · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun}` : `Practice · ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''} · up to ${perRun} applications`),
         S.retryable > 0 ? button({ label: `Re-run ${S.retryable} answered held`, icon: 'refresh', size: 'sm', disabled: blk.length > 0, onClick: () => start('held') }) : null,
       );
     }

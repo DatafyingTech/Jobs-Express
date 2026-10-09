@@ -42,7 +42,7 @@ for (const width of WIDTHS) {
       const sw = document.documentElement.scrollWidth;
       const wide = [...document.querySelectorAll('.main *, .side *')].filter((el) => {
         const rc = el.getBoundingClientRect();
-        return rc.width > 0 && rc.right > cfgWidth + 1 && !el.closest('.table-wrap, .nav, .log, .subnav, .seg-wrap');
+        return rc.width > 0 && rc.right > cfgWidth + 1 && !el.closest('.table-wrap, .nav, .log, .subnav');
       }).slice(0, 3).map((el) => el.tagName + '.' + el.className);
       const start = [...document.querySelectorAll('button')].find((x) => /Start applying/.test(x.textContent));
       const sr = start?.getBoundingClientRect();
