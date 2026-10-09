@@ -1,0 +1,9 @@
+# Everything personal lives here and never leaves your machine
+data/
+
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*

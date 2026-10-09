@@ -1,0 +1,22 @@
+{
+  "name": "jobs-express",
+  "version": "1.0.0",
+  "description": "Parallel Claude Code agents that drive your own Chrome to find and fill out job applications honestly. Local, private, no dependencies.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "author": "Kevin Goldstein",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DatafyingTech/Jobs-Express.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "demo": "node server.mjs --demo",
+    "record-demo": "node tools/record_demo.mjs"
+  }
+}

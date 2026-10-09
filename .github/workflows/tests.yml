@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  node-tests:
+    name: node tests (${{ matrix.os }}, node 20)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # There is nothing to install: the project has no dependencies.
+      - name: Run tests
+        run: node --test
+
+      - name: Server starts in demo mode and answers
+        shell: bash
+        run: |
+          CJA_NO_OPEN=1 node server.mjs --demo --port 4399 &
+          SERVER_PID=$!
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:4399/api/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4399/ | grep -q "Jobs Express"
+          kill $SERVER_PID
