@@ -43,7 +43,7 @@ Open the apply page in your own tab and fill the form with the browser tools fol
 
 - Greenhouse and Ashby location fields are autocompletes. Type the city, then pick the real suggestion, then read the field back.
 - Ashby inputs sometimes need real typing events rather than a value injected by a form tool. Verify each one.
-- Greenhouse sometimes shows an email security code after you submit. You must not read the person's email: log the role as held with the note "needs an emailed verification code", close the tab, and move on.
+- Greenhouse sometimes shows an email security code after you submit. You must not read the person's email: log the role as held with the question `Needs the emailed verification code`, close the tab, and move on. The person enters the code themselves from their inbox.
 - Workable asks for compensation as a bare number (no currency symbol or commas).
 - Upload the resume with the file upload tool and check the file name shows up.
 - Sections for demographic questions: use the saved EEO defaults.

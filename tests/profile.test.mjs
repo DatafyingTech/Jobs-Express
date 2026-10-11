@@ -46,7 +46,7 @@ test('uploads reject the wrong type, empty files and traversal names', () => {
   const { store, dir, cleanup } = tempStore();
   assert.throws(() => saveResume(store, 'run.exe', Buffer.from('x')), /PDF or Word/);
   assert.throws(() => saveResume(store, 'a.pdf', Buffer.alloc(0)), /empty/);
-  saveResume(store, '../../../evil.pdf', Buffer.from('x'));
+  saveResume(store, '../../../evil.pdf', Buffer.from('%PDF-1.4 x'));
   const written = fs.readdirSync(path.join(dir, 'resume'));
   assert.deepEqual(written, ['evil.pdf']);
   assert.ok(!fs.existsSync(path.join(dir, '..', '..', 'evil.pdf')));

@@ -26,14 +26,14 @@ Open the posting in your own tab. Read the full description, not just the title.
 3. Do any hard requirements disqualify it (see the skip rules)?
 4. Run the duplicate check with the log helper before you start the form.
 
-Only continue with postings that show an **Easy Apply** button. If the button says "Apply" and sends the person to another site, leave it for the company-board source unless the person's profile enabled that source and you were told to follow through; otherwise skip it with the note "external apply".
+Only continue with postings that show an **Easy Apply** button. If the button says "Apply" and sends the person to another site, skip it with the note "external apply" (the company-board source finds those roles on the employer's own board).
 
 ## Filling the Easy Apply dialog
 
 - Contact info: use the profile's name, email, phone and location. If LinkedIn pre-fills something that disagrees with the profile, correct it.
 - Resume: choose the uploaded resume if it matches the profile's resume file name. Otherwise upload the profile's file with the file upload tool. Do not generate a new resume.
 - Work through every step ("Next", "Review"). Read each field and each question. Use the profile and the saved answers; apply the hold rule for anything required that you cannot answer.
-- Numeric fields ("years of experience with X") must use numbers that are true according to the profile. If the profile gives a total and not a per-tool figure, only answer for tools it lists; otherwise hold.
+- Numeric fields ("years of experience with X") must use numbers that are true according to the profile. Only answer if the profile states a number for that exact tool or skill. Never reuse the total years of experience as a per-tool figure; otherwise hold.
 - Untick "Follow company to stay up to date" before the final step.
 - Do not use Premium upsells, "Reactivate Premium", or "Get hired faster" offers.
 - Before the last click, read back every field value from the review page.

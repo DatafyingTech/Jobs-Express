@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Runner, summarizeEvent, buildClaudeArgs, ALLOWED_TOOLS } from '../lib/runner.mjs';
+import { Runner, summarizeEvent, buildClaudeArgs, ALLOWED_TOOLS, DENIED_TOOLS, FETCH_DOMAINS, CHROME_TOOLS, clip, authMessage, pruneRuns } from '../lib/runner.mjs';
+import { cleanEnv } from '../lib/claude.mjs';
 import { tempStore, sampleProfile } from './helpers.mjs';
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-claude.mjs');
@@ -25,12 +26,41 @@ test('claude arguments never include the dangerous flag and keep Bash narrow', (
   assert.ok(args.includes('stream-json') && args.includes('--verbose'));
   const bash = ALLOWED_TOOLS.filter((t) => t.startsWith('Bash'));
   assert.deepEqual(bash, ['Bash(node tools/log.mjs:*)']);
-  assert.ok(ALLOWED_TOOLS.includes('mcp__claude-in-chrome__*'));
+  assert.ok(ALLOWED_TOOLS.includes('mcp__claude-in-chrome__navigate'));
   assert.equal(args[args.indexOf('--allowedTools')], '--allowedTools');
   assert.ok(!buildClaudeArgs({ chrome: false }).includes('--chrome'));
   assert.ok(args.includes('--strict-mcp-config'), 'agents get no connectors except Claude in Chrome');
-  const tools = args.slice(args.indexOf('--tools') + 1, args.indexOf('--tools') + 5);
-  assert.deepEqual(tools, ['Read', 'WebFetch', 'WebSearch', 'Bash']);
+  const tools = args.slice(args.indexOf('--tools') + 1, args.indexOf('--tools') + 4);
+  assert.deepEqual(tools, ['WebFetch', 'WebSearch', 'Bash']);
+});
+
+test("the agent is locked to the allow-list: the person's own Claude settings are ignored and nothing prompts", () => {
+  const args = buildClaudeArgs();
+  assert.equal(args[args.indexOf('--setting-sources') + 1], 'project');
+  assert.equal(args[args.indexOf('--permission-mode') + 1], 'dontAsk');
+  assert.ok(!ALLOWED_TOOLS.some((t) => /^(Read|Edit|Write)/.test(t)), 'no file tools');
+  assert.ok(!ALLOWED_TOOLS.some((t) => t.endsWith('*')), 'no wildcards: every Chrome tool is named');
+  assert.ok(CHROME_TOOLS.length >= 10 && CHROME_TOOLS.every((t) => t.startsWith('mcp__claude-in-chrome__')));
+  assert.ok(!ALLOWED_TOOLS.includes('WebFetch'), 'WebFetch is only allowed per domain');
+  for (const d of FETCH_DOMAINS) assert.ok(ALLOWED_TOOLS.includes(`WebFetch(domain:${d})`), d);
+  for (const t of ['javascript_tool', 'gif_creator', 'upload_image', 'read_network_requests', 'browser_batch', 'shortcuts_execute']) {
+    assert.ok(DENIED_TOOLS.includes(`mcp__claude-in-chrome__${t}`), t);
+    assert.ok(!ALLOWED_TOOLS.includes(`mcp__claude-in-chrome__${t}`), t);
+  }
+  const denied = args.slice(args.indexOf('--disallowedTools') + 1, args.indexOf('--allowedTools'));
+  assert.deepEqual(denied, DENIED_TOOLS);
+  assert.ok(args.indexOf('--allowedTools') > args.indexOf('--disallowedTools'), '--allowedTools stays last: it takes a list');
+});
+
+test('agents get an allow-listed environment, never tokens, keys or passwords', () => {
+  const env = cleanEnv({
+    PATH: '/bin', Path: 'x', HOME: '/h', USERPROFILE: 'u', APPDATA: 'a', SystemRoot: 'w', LANG: 'en_US', LC_ALL: 'C', TEMP: 't',
+    CJA_DATA_DIR: '/d', CLAUDE_CONFIG_DIR: '/c', ANTHROPIC_BASE_URL: 'http://proxy', HTTPS_PROXY: 'http://p:1',
+    ANTHROPIC_API_KEY: 'sk-1', ANTHROPIC_AUTH_TOKEN: 't', GITHUB_TOKEN: 'g', AWS_SECRET_ACCESS_KEY: 'a', NPM_TOKEN: 'n', MY_PASSWORD: 'p',
+    SSH_AUTH_SOCK: 's', OPENAI_API_KEY: 'o', CLAUDE_CODE_API_KEY: 'x', NODE_OPTIONS: '--require evil', GOOGLE_APPLICATION_CREDENTIALS: 'g',
+  });
+  for (const keep of ['PATH', 'Path', 'HOME', 'USERPROFILE', 'APPDATA', 'SystemRoot', 'LANG', 'LC_ALL', 'TEMP', 'CJA_DATA_DIR', 'CLAUDE_CONFIG_DIR', 'ANTHROPIC_BASE_URL', 'HTTPS_PROXY']) assert.ok(keep in env, keep);
+  for (const drop of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'GITHUB_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'NPM_TOKEN', 'MY_PASSWORD', 'SSH_AUTH_SOCK', 'OPENAI_API_KEY', 'CLAUDE_CODE_API_KEY', 'NODE_OPTIONS', 'GOOGLE_APPLICATION_CREDENTIALS']) assert.ok(!(drop in env), drop);
 });
 
 test('summarizeEvent turns stream-json into readable lines', () => {
@@ -51,7 +81,7 @@ test('summarizeEvent turns stream-json into readable lines', () => {
 test('smoke: the runner spawns an agent, streams its output, and finishes cleanly', async () => {
   const { store, cleanup } = tempStore();
   const argsFile = path.join(store.dataDir, 'args.jsonl');
-  process.env.FAKE_ARGS_FILE = argsFile;
+  process.env.CJA_FAKE_ARGS_FILE = argsFile;
   const runner = new Runner({ store, spec, chrome: true });
   const logs = [];
   runner.on('log', (e) => logs.push(e));
@@ -72,13 +102,13 @@ test('smoke: the runner spawns an agent, streams its output, and finishes cleanl
   const runDir = path.join(store.dataDir, 'runs', end.id);
   assert.ok(fs.existsSync(path.join(runDir, 'run.log')));
   assert.ok(fs.existsSync(path.join(runDir, 'agent-1.jsonl')));
-  delete process.env.FAKE_ARGS_FILE;
+  delete process.env.CJA_FAKE_ARGS_FILE;
   cleanup();
 });
 
 test('stop kills a hanging agent and the run ends as stopped', async () => {
   const { store, cleanup } = tempStore();
-  process.env.FAKE_MODE = 'hang';
+  process.env.CJA_FAKE_MODE = 'hang';
   const runner = new Runner({ store, spec });
   runner.start({ profile: sampleProfile(), mode: 'practice', agents: 2 });
   await waitFor(() => runner.children.size === 2 && runner.recent().some((l) => l.kind === 'say'));
@@ -91,19 +121,19 @@ test('stop kills a hanging agent and the run ends as stopped', async () => {
   for (const pid of pids) {
     assert.throws(() => process.kill(pid, 0), 'process is gone');
   }
-  delete process.env.FAKE_MODE;
+  delete process.env.CJA_FAKE_MODE;
   cleanup();
 });
 
 test('the turn cap stops a runaway agent', async () => {
   const { store, cleanup } = tempStore();
-  process.env.FAKE_MODE = 'tools';
+  process.env.CJA_FAKE_MODE = 'tools';
   const runner = new Runner({ store, spec });
   runner.start({ profile: sampleProfile(), mode: 'practice', agents: 1, maxTurns: 3 });
   await waitFor(() => runner.snapshot().status !== 'running');
   assert.equal(runner.snapshot().status, 'stopped');
-  assert.match(runner.snapshot().reason, /Turn limit/);
-  delete process.env.FAKE_MODE;
+  assert.match(runner.snapshot().reason, /Action limit/);
+  delete process.env.CJA_FAKE_MODE;
   cleanup();
 });
 
