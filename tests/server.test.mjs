@@ -12,10 +12,11 @@ async function boot(opts = {}) {
   const app = createApp({ store: t.store, demo: !!opts.demo, preflight: async () => ({ rows: [], ready: true }) });
   const port = await app.listen(0);
   const base = `http://127.0.0.1:${port}`;
+  const token = app.token;
   const call = async (method, path, body, headers = {}) => {
     const res = await fetch(base + path, {
       method,
-      headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(method !== 'GET' ? { 'x-cja': '1' } : {}), ...headers },
+      headers: { 'x-cja-token': token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(method !== 'GET' ? { 'x-cja': '1' } : {}), ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await res.text();
@@ -23,7 +24,7 @@ async function boot(opts = {}) {
     try { json = JSON.parse(text); } catch { /* not json */ }
     return { status: res.status, json, text, headers: res.headers };
   };
-  return { ...t, app, port, base, call, close: async () => { await app.close(); t.cleanup(); } };
+  return { ...t, app, port, base, token, call, close: async () => { await app.close(); t.cleanup(); } };
 }
 
 test('health reports the app name, version and port, and binds to loopback', async () => {
@@ -103,12 +104,12 @@ test('applications list, filters, CSV and held questions', async () => {
 
 test('resume upload stores the file inside the data folder', async () => {
   const s = await boot();
-  const res = await fetch(s.base + '/api/resume', { method: 'POST', headers: { 'x-cja': '1', 'x-filename': encodeURIComponent('Alex Rivera.pdf') }, body: Buffer.from('%PDF-1.4 sample') });
+  const res = await fetch(s.base + '/api/resume', { method: 'POST', headers: { 'x-cja': '1', 'x-cja-token': s.token, 'x-filename': encodeURIComponent('Alex Rivera.pdf') }, body: Buffer.from('%PDF-1.4 sample') });
   assert.equal(res.status, 200);
   const state = await s.call('GET', '/api/state');
   assert.match(state.json.profile.about.resumePath, /resume/);
   assert.equal(state.json.profile.about.resumeName, 'Alex_Rivera.pdf');
-  const bad = await fetch(s.base + '/api/resume', { method: 'POST', headers: { 'x-cja': '1', 'x-filename': 'x.exe' }, body: Buffer.from('MZ') });
+  const bad = await fetch(s.base + '/api/resume', { method: 'POST', headers: { 'x-cja': '1', 'x-cja-token': s.token, 'x-filename': 'x.exe' }, body: Buffer.from('MZ') });
   assert.equal(bad.status, 400);
   await s.close();
 });
@@ -117,7 +118,7 @@ test('SSE connects, sends a hello event and streams run updates', async () => {
   const s = await boot({ demo: true, seed: true });
   const events = [];
   const controller = new AbortController();
-  const res = await fetch(s.base + '/api/events', { signal: controller.signal });
+  const res = await fetch(s.base + '/api/events', { signal: controller.signal, headers: { 'x-cja-token': s.token } });
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/event-stream/);
   const reader = res.body.getReader();

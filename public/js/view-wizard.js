@@ -2,7 +2,7 @@ import { h, mount } from './dom.js';
 import { icon } from './icons.js';
 import { S, on, saveDraft, resetDraft } from './state.js';
 import { button, guard, preflightPanel, warningsCard, toast } from './components.js';
-import { aboutSection, prefsSection, honestSection } from './forms.js';
+import { aboutSection, prefsSection, honestSection, EMAIL_RE, PHONE_RE } from './forms.js';
 import { go } from './router.js';
 
 const STEPS = [
@@ -105,6 +105,8 @@ export function stepMissing(key, d, pf) {
     if (!d.about.email) miss.push('your email');
     if (!d.about.phone) miss.push('your phone number');
     if (!d.about.resumeName) miss.push('a resume file');
+    const odd = [d.about.email && !EMAIL_RE.test(d.about.email.trim()) && 'your email address', d.about.phone && !PHONE_RE.test(d.about.phone.trim()) && 'your phone number'].filter(Boolean);
+    if (odd.length) return (miss.length ? 'Still needed: ' + miss.join(', ') + '. ' : '') + `Check ${odd.join(' and ')}: it does not look right.`;
   } else if (key === 'wants') {
     if (!d.prefs.categories.length && !d.prefs.customTitles.length) miss.push('at least one category or title');
   } else if (key === 'honest') {
@@ -139,7 +141,7 @@ function review(goStep) {
       dd('Pay', [money(p.payFloor) && `floor ${money(p.payFloor)}`, money(p.payIdeal) && `ideal ${money(p.payIdeal)}`].filter(Boolean).join(', ')),
       dd('Per run', String(p.perRun)), dd('Sources', srcs)),
     block('Your honest profile', 4,
-      dd('Experience', hn.yearsExperience ? `${hn.yearsExperience} years` : ''),
+      dd('Experience', hn.yearsExperience ? `${hn.yearsExperience} years` : ''), dd('Work history', hn.workHistory),
       dd('Skills', hn.skills), dd('Tools', hn.tools), dd('Certifications', hn.certifications || 'None listed'),
       dd('Education', hn.education), dd('Never claim', hn.neverClaim)),
   );

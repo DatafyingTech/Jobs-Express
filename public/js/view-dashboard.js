@@ -1,8 +1,8 @@
 import { h, mount, relTime, clock, formatDuration } from './dom.js';
 import { icon } from './icons.js';
-import { S, on, blockers, loadApps, loadHeld, loadPreflight } from './state.js';
+import { S, on, blockers, loadApps, loadHeld, loadPreflight, loadInfo } from './state.js';
 import { POST } from './api.js';
-import { button, guard, toast, statusChip, emptyState, segmented } from './components.js';
+import { button, guard, toast, statusChip, emptyState, segmented, dataWarnings } from './components.js';
 import { go } from './router.js';
 
 const MODE_DESC = {
@@ -14,7 +14,8 @@ let chosen = null; // { mode, agents } survives re-renders within the session
 
 export function dashboardView() {
   const settings = S.info.profile.settings;
-  chosen ??= { mode: settings.mode === 'live' ? 'live' : 'practice', agents: settings.agents || 1 };
+  // Every visit starts in Practice. Live is always a deliberate choice, never a leftover from last time.
+  chosen ??= { mode: 'practice', agents: settings.agents || 1 };
   let timer = null;
 
   // --- run panel -------------------------------------------------------------------------
@@ -24,7 +25,7 @@ export function dashboardView() {
     const dlg = h('dialog', { 'aria-labelledby': 'live-h' },
       h('div', { class: 'd-body' },
         h('h2', { id: 'live-h' }, 'Start a live run?'),
-        h('p', { class: 'muted' }, `Up to ${S.info.profile.prefs.perRun} real applications will be sent from your accounts, using ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''}. You cannot take a submitted application back.`),
+        h('p', { class: 'muted' }, `Up to ${S.info.profile.prefs.perRun} real application${S.info.profile.prefs.perRun === 1 ? '' : 's'} will be sent from your accounts, using ${chosen.agents} agent${chosen.agents > 1 ? 's' : ''}. You cannot take a submitted application back.`),
         h('p', { class: 'muted' }, 'Have you run Practice mode first and looked over what it filled in?'),
       ),
       h('div', { class: 'd-foot' },
@@ -170,6 +171,24 @@ export function dashboardView() {
     return { el, add, reset, setStatus };
   })();
 
+  // --- daily schedule status line ----------------------------------------------------------
+  const schedHost = h('div', { class: 'sched-line', role: 'status', 'aria-label': 'Daily schedule' });
+  function drawSched() {
+    const sc = S.info.schedule;
+    if (!sc) { mount(schedHost); schedHost.hidden = true; return; }
+    schedHost.hidden = false;
+    if (!sc.enabled) {
+      mount(schedHost, icon('clock', 16),
+        h('span', { class: 'muted' }, sc.lastRunText ? `Daily schedule is off. ${sc.lastRunText}.` : 'Want it to run by itself every day?'),
+        h('a', { href: '#/settings/schedule' }, sc.lastRunText ? 'Turn it back on' : 'Set up a daily run'));
+      return;
+    }
+    mount(schedHost, icon('clock', 16),
+      h('span', { class: 'when-next' }, h('b', {}, `Next run ${sc.nextRunText}`), h('span', { class: 'faint' }, sc.mode === 'live' ? ' · Live' : ' · Practice')),
+      sc.lastRunText ? [h('span', { class: 'sep', 'aria-hidden': 'true' }, '/'), h('span', { class: 'muted' }, sc.lastRunText)] : null,
+      h('a', { href: '#/settings/schedule' }, 'Schedule and digests'));
+  }
+
   // --- lower columns -----------------------------------------------------------------------
   const recentHost = h('section', { class: 'panel', 'aria-label': 'Recent applications' });
   const inputHost = h('section', { class: 'panel', 'aria-label': 'Needs your input' });
@@ -213,14 +232,16 @@ export function dashboardView() {
   on('apps', drawRecent);
   on('held', () => { drawInput(); drawRun(); });
   on('preflight', drawRun);
-  on('info', drawRun);
+  on('info', () => { drawRun(); drawSched(); });
 
   timer = setInterval(() => {
     const el = document.getElementById('elapsed');
     if (el && S.run.status === 'running') el.textContent = formatDuration(Date.now() - new Date(S.run.startedAt).getTime());
   }, 1000);
 
-  drawRun(); drawRecent(); drawInput();
+  drawRun(); drawRecent(); drawInput(); drawSched();
+  // A scheduled run happens in a separate process, so look for its news now and then.
+  const refresher = setInterval(() => { if (!document.hidden) loadInfo().catch(() => {}); }, 60_000);
   if (!S.preflight && !S.info.demo) loadPreflight().catch(() => {});
   loadApps(); loadHeld();
 
@@ -228,8 +249,8 @@ export function dashboardView() {
     el: h('div', { class: 'stack' },
       h('div', { class: 'page-head', style: { marginBottom: 0 } },
         h('div', {}, h('h1', {}, 'Dashboard'), h('p', {}, 'Start a run, watch what the agents do, and review the results.'))),
-      runHost, logApi.el,
+      dataWarnings(), schedHost, runHost, logApi.el,
       h('div', { class: 'cols' }, recentHost, inputHost)),
-    destroy: () => clearInterval(timer),
+    destroy: () => { clearInterval(timer); clearInterval(refresher); },
   };
 }

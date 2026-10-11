@@ -1,5 +1,6 @@
 // Shared client state and a tiny event bus. Views subscribe with on() and are cleaned up on navigation.
 import { GET, POST, PUT } from './api.js';
+import { diffProfile, applyChanges, isPlain } from './diff.js';
 
 export const S = {
   info: null,          // /api/state
@@ -16,6 +17,10 @@ export const S = {
   log: [],
   connected: true,
   loaded: false,
+  setup: null,         // /api/setup: install command info
+  setupJob: { status: 'idle', lines: [] },   // the install or sign-in that is running or just ran
+  schedule: null,      // /api/schedule
+  scheduleLines: [],   // progress lines from a schedule test run
 };
 
 const target = new EventTarget();
@@ -39,9 +44,37 @@ export function clearSubs() {
 
 export const clone = (o) => JSON.parse(JSON.stringify(o));
 
+// ---- keep an unsaved draft across a reload (this tab only) --------------------------------------
+const DRAFT_KEY = 'cja-draft' + (new URLSearchParams(location.search).get('demo') === '1' ? '-demo' : '');
+let persistTimer = null;
+function persistDraft() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      if (S.dirty && S.draft && S.info) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(diffProfile(S.info.profile, S.draft)));
+    } catch { /* storage blocked: the draft just will not survive a reload */ }
+  }, 300);
+}
+export function forgetDraft() {
+  clearTimeout(persistTimer);
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+}
+function restoreDraft() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
+    if (isPlain(saved) && Object.keys(saved).length) {
+      applyChanges(S.draft, saved);
+      S.dirty = true;
+      return true;
+    }
+  } catch { /* nothing usable stored */ }
+  return false;
+}
+
 export function resetDraft() {
   S.draft = clone(S.info.profile);
   S.dirty = false;
+  forgetDraft();
 }
 
 export async function loadInfo() {
@@ -49,7 +82,11 @@ export async function loadInfo() {
   S.run = S.info.run;
   S.appCounts = S.info.counts;
   S.retryable = S.info.retryable;
-  if (!S.draft || !S.dirty) resetDraft();
+  if (!S.draft) {
+    S.draft = clone(S.info.profile);
+    S.dirty = false;
+    restoreDraft();
+  } else if (!S.dirty) resetDraft();
   emit('info');
 }
 
@@ -78,6 +115,34 @@ export async function loadPreflight() {
   }
 }
 
+export async function loadSetup() {
+  const r = await GET('/api/setup');
+  S.setup = r;
+  if (r.job && r.job.status !== 'idle') S.setupJob = { ...r.job };
+  emit('setup');
+  return r;
+}
+
+/** Live events from the install and sign-in jobs. */
+export function applySetupEvent(e) {
+  const job = S.setupJob;
+  if (e.start || job.id !== e.id) {
+    S.setupJob = { id: e.id, kind: e.kind, status: 'running', lines: [], command: e.command };
+  }
+  if (e.line) S.setupJob.lines.push(e.line);
+  if (S.setupJob.lines.length > 400) S.setupJob.lines.splice(0, S.setupJob.lines.length - 400);
+  if (e.status) S.setupJob.status = e.status;
+  if (e.exitCode !== undefined) S.setupJob.exitCode = e.exitCode;
+  emit('setup', e);
+  if (e.done) emit('setup-done', e);
+}
+
+export async function loadScheduleInfo({ system = false } = {}) {
+  S.schedule = await GET('/api/schedule' + (system ? '?system=1' : ''));
+  emit('schedule');
+  return S.schedule;
+}
+
 export async function testConnection() {
   S.testing = true;
   emit('preflight');
@@ -97,12 +162,13 @@ export async function confirmLinkedin(confirmed) {
 }
 
 export async function saveDraft({ complete } = {}) {
-  const payload = clone(S.draft);
+  const payload = diffProfile(S.info.profile, S.draft);
   if (complete) payload.setupComplete = true;
   const saved = await PUT('/api/profile', payload);
   S.info.profile = saved;
   S.draft = clone(saved);
   S.dirty = false;
+  forgetDraft();
   await loadInfo();
   emit('saved');
   return saved;
@@ -113,6 +179,7 @@ export function markDirty() {
     S.dirty = true;
     emit('dirty');
   }
+  persistDraft();
 }
 
 /** Reasons the Start button should not be pressed yet. Each item: { text, href? } */

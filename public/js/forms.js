@@ -2,6 +2,23 @@
 import { h, get, set, mount } from './dom.js';
 import { icon } from './icons.js';
 import { S, markDirty } from './state.js';
+
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export const PHONE_RE = /^(?=(?:\D*\d){7,15}\D*$)[+()\d\s.\-x#/]+$/i;
+
+/** Show a quiet inline message under a field when what was typed does not look right. Never blocks saving. */
+function checked(fieldEl, input, test, message) {
+  const note = h('div', { class: 'hint err', hidden: true, role: 'status' }, message);
+  fieldEl.append(note);
+  const run = () => {
+    const bad = input.value.trim() !== '' && !test(input.value.trim());
+    note.hidden = !bad;
+    if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+  };
+  input.addEventListener('blur', run);
+  input.addEventListener('input', () => { if (!note.hidden) run(); });
+  return fieldEl;
+}
 import {
   field, textInput, textArea, selectInput, numberInput, chipGroup, tagInput, segmented, switchRow, radioList, resumeDropzone,
 } from './components.js';
@@ -20,8 +37,8 @@ export function aboutSection() {
     fs('Contact details', 'These go into the standard fields on application forms.',
       h('div', { class: 'grid two' },
         field('Full name', textInput('about.fullName', { autocomplete: 'name' }), { required: true }),
-        field('Email', textInput('about.email', { type: 'email', autocomplete: 'email' }), { required: true, hint: 'Employers reply here. Agents never open your inbox.' }),
-        field('Phone', textInput('about.phone', { type: 'tel', autocomplete: 'tel' }), { required: true }),
+        (() => { const i = textInput('about.email', { type: 'email', autocomplete: 'email' }); return checked(field('Email', i, { required: true, hint: 'Employers reply here. Agents never open your inbox.' }), i, (v) => EMAIL_RE.test(v), 'That does not look like an email address. Check it before you continue.'); })(),
+        (() => { const i = textInput('about.phone', { type: 'tel', autocomplete: 'tel' }); return checked(field('Phone', i, { required: true }), i, (v) => PHONE_RE.test(v), 'That does not look like a phone number. Check it before you continue.'); })(),
         field('LinkedIn profile URL', textInput('about.linkedin', { placeholder: 'https://www.linkedin.com/in/your-name' }), { required: false }),
         field('City', textInput('about.city', { autocomplete: 'address-level2' }), { required: false }),
         field('State or region', textInput('about.state', { autocomplete: 'address-level1' }), { required: false }),
@@ -49,7 +66,7 @@ export function prefsSection() {
   const p = S.draft.prefs;
   const presets = [5, 10, 25];
   const isCustom = !presets.includes(Number(p.perRun));
-  const customWrap = h('div', { style: { display: isCustom ? 'block' : 'none', width: '120px' } }, numberInput('prefs.perRun', { label: 'Applications per run (custom number)' }));
+  const customWrap = h('div', { style: { display: isCustom ? 'block' : 'none', width: '120px' } }, numberInput('prefs.perRun', { label: 'Applications per run (custom number)', min: 1, max: 100 }));
   const perRun = segmented(
     [...presets.map((n) => ({ value: n, label: String(n) })), { value: 'custom', label: 'Custom' }],
     isCustom ? 'custom' : Number(p.perRun),
@@ -64,8 +81,9 @@ export function prefsSection() {
   );
 
   const per = () => `per ${S.draft.prefs.payPeriod === 'hour' ? 'hour' : 'year'}`;
-  const floorInput = numberInput('prefs.payFloor', { prefix: '$', placeholder: '90,000', grouped: true, suffix: per() });
-  const idealInput = numberInput('prefs.payIdeal', { prefix: '$', placeholder: '120,000', grouped: true, suffix: per() });
+  const payLimits = { prefix: '$', grouped: true, decimals: 2, min: 0, max: 10_000_000 };
+  const floorInput = numberInput('prefs.payFloor', { ...payLimits, placeholder: '90,000', suffix: per() });
+  const idealInput = numberInput('prefs.payIdeal', { ...payLimits, placeholder: '120,000', suffix: per() });
   const periodSelect = selectInput('prefs.payPeriod', ['year', 'hour']);
   periodSelect.addEventListener('change', () => { floorInput.setSuffix(per()); idealInput.setSuffix(per()); });
 
@@ -120,7 +138,8 @@ export function honestSection() {
       h('div', { class: 'grid' },
         field('Years of professional experience', textInput('honest.yearsExperience', { placeholder: 'For example: 7' }), { required: false }),
         field('Short summary in your own words', textArea('honest.summary', { rows: 3, placeholder: 'Two or three sentences about what you do well. Agents reuse this when a form wants a paragraph.' }), { required: false }),
-        field('Jobs you have held', textArea('honest.titles', { rows: 4, placeholder: 'One per line: title, employer type, years. For example: Help Desk Technician, 2019 to 2021' }), { required: false }),
+        field('Work history', textArea('honest.workHistory', { rows: 5, placeholder: 'One job per line, newest first: employer, job title, start and end dates. For example: Acme Corp, Help Desk Technician, June 2019 to March 2021' }), { required: false, hint: 'Forms often ask for your current and past employers and dates. Agents copy these exactly and never fill a gap. Leave this empty and every such form is held for you.' }),
+        field('Job titles you have held', textArea('honest.titles', { rows: 3, placeholder: 'Optional. Titles only, one per line.' }), { required: false }),
       ),
     ),
     fs('Skills and tools', null,

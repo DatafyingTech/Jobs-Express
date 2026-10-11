@@ -28,11 +28,29 @@ export function inputView() {
       const r = await POST('/api/held/dismiss', { id: q.id });
       S.held = r.items;
       S.retryable = r.retryable;
+      await loadInfo();
       draw();
     });
   }
 
+  // Sites that email a code are held for you: agents cannot read your email, so you enter the code yourself.
+  const isCode = (q) => /verification code|emailed code|security code|one-time (pass)?code|confirmation code/i.test(q.question);
+
+  function codeItem(q) {
+    return h('div', { class: 'q-item' },
+      h('div', { class: 'q' }, h('span', { class: 'tag-code' }, icon('lock', 14), 'Needs a code from your email')),
+      h('div', { class: 'meta' },
+        h('span', {}, h('b', {}, q.company)), q.role ? [h('span', { class: 'dot' }, '·'), h('span', {}, q.role)] : null,
+        h('span', { class: 'dot' }, '·'), h('span', { class: 'faint' }, relTime(q.ts))),
+      h('p', { class: 'muted', style: { maxWidth: '66ch' } }, 'This site emailed a verification code. Agents never read your email, so they stopped here. Open the posting, then enter the code from your inbox yourself and finish the application.'),
+      h('div', { class: 'q-actions' },
+        q.url ? button({ label: 'Open the posting', icon: 'external', kind: 'primary', size: 'sm', href: q.url, target: '_blank' }) : null,
+        button({ label: 'I finished it, clear this', size: 'sm', onClick: () => dismiss(q) }),
+        button({ label: 'Not applying', size: 'sm', kind: 'ghost', onClick: () => dismiss(q) })));
+  }
+
   function questionItem(q) {
+    if (isCode(q)) return codeItem(q);
     const area = h('textarea', { class: 'textarea', rows: 2, id: `ans-${q.id}`, 'aria-label': `Your answer for ${q.company}`, placeholder: 'Your answer, in your own words. Be exact: agents will use it word for word.' });
     area.value = drafts.get(q.id) || '';
     area.addEventListener('input', () => drafts.set(q.id, area.value));

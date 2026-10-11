@@ -32,3 +32,43 @@ test('the stylesheet keeps the phone layout guards', () => {
   assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
 });
+
+test('the requirements step offers the one-click install and sign-in, and the Chrome extension stays manual', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'public', 'js', 'components.js'), 'utf8');
+  assert.match(src, /label: 'Install Claude Code'/);
+  assert.match(src, /label: 'Sign in to Claude'/);
+  assert.match(src, /Run the installer/, 'the confirm dialog has its own button');
+  assert.match(src, /c\.display/, 'the dialog shows the exact command');
+  assert.match(src, /label: 'Get the extension'/);
+  assert.match(src, /'Test connection'/);
+  assert.doesNotMatch(src, /innerHTML/);
+});
+
+test('emailed-code holds are shown as "enter it yourself", not as a question to answer', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'public', 'js', 'view-input.js'), 'utf8');
+  assert.match(src, /verification code/);
+  assert.match(src, /Open the posting/);
+  assert.match(src, /agents never read your email/i);
+});
+
+test('the page sends the per-launch token on every request and no inline script is needed', () => {
+  const api = fs.readFileSync(path.join(ROOT, 'public', 'js', 'api.js'), 'utf8');
+  assert.match(api, /x-cja-token/);
+  assert.match(api, /meta\[name="cja-token"\]/);
+  const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+  assert.match(html, /<meta name="cja-token" content="__CJA_TOKEN__">/);
+  assert.doesNotMatch(html, /<script(?![^>]*src=)/);
+});
+
+test('the launchers check for the whole download and pass real exit codes', () => {
+  const bat = fs.readFileSync(path.join(ROOT, 'Start.bat'), 'utf8');
+  assert.match(bat, /if not exist "%~dp0server\.mjs"/);
+  assert.match(bat, /exit \/b %RC%/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'start.sh'), 'utf8'), /\[ ! -f server\.mjs \]/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'start.command'), 'utf8'), /\[ ! -f server\.mjs \]/);
+});
+
+test('CI runs on Node 18, 20 and 22', () => {
+  const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'tests.yml'), 'utf8');
+  assert.match(yml, /node: \[18, 20, 22\]/);
+});

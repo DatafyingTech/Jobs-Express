@@ -1,6 +1,6 @@
 import { h, get, set, mount } from './dom.js';
 import { icon } from './icons.js';
-import { S, markDirty, loadPreflight, testConnection, confirmLinkedin, on } from './state.js';
+import { S, markDirty, loadPreflight, testConnection, confirmLinkedin, on, loadSetup, emit } from './state.js';
 import { POST, uploadResume } from './api.js';
 
 // ---------- toasts ----------
@@ -26,6 +26,25 @@ export function button({ label, icon: ic, kind = '', size = '', onClick, title, 
   const kids = [loading ? h('span', { class: 'spinner', 'aria-hidden': 'true' }) : ic ? icon(ic, size === 'lg' ? 18 : 16) : null, label ? h('span', {}, label) : null];
   if (href) return h('a', { class: cls, href, target, rel: target ? 'noopener noreferrer' : null, title, 'aria-label': ariaLabel }, ...kids);
   return h('button', { class: cls, type: 'button', onClick, title, disabled: disabled || loading, 'aria-label': ariaLabel || (!label ? title : null) }, ...kids);
+}
+
+// ---------- confirm dialog ----------
+/**
+ * A modal that resolves true on the confirm button and false otherwise.
+ * `body` is an array of DOM nodes. Focus starts on Cancel so Enter never confirms by accident.
+ */
+export function confirmDialog({ title, body = [], confirmLabel = 'Continue', confirmIcon = null, kind = 'primary' }) {
+  return new Promise((resolve) => {
+    const cancel = button({ label: 'Cancel', onClick: () => dlg.close('no') });
+    const dlg = h('dialog', { 'aria-labelledby': 'dlg-h' },
+      h('div', { class: 'd-body' }, h('h2', { id: 'dlg-h' }, title), ...body),
+      h('div', { class: 'd-foot' }, cancel, button({ label: confirmLabel, icon: confirmIcon, kind, onClick: () => dlg.close('yes') })));
+    dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'yes'); dlg.remove(); });
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close('no'); });
+    document.body.append(dlg);
+    dlg.showModal();
+    cancel.focus();
+  });
 }
 
 // ---------- form fields ----------
@@ -75,23 +94,49 @@ export function selectInput(path, options) {
   return el;
 }
 
-const fmt = (v) => (v === '' || v == null ? '' : Number(v).toLocaleString('en-US'));
+const fmt = (v) => (v === '' || v == null ? '' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
 
-/** A whole-number field. Shows thousands separators once you leave it. Optional $ prefix and a suffix like "per year". */
-export function numberInput(path, { placeholder, prefix, suffix, label, grouped = false } = {}) {
-  const el = h('input', { class: 'input', type: 'text', inputmode: 'numeric', placeholder, 'aria-label': label });
-  el.value = grouped ? fmt(get(S.draft, path)) : String(get(S.draft, path) ?? '');
+/**
+ * A number field. `decimals: 2` allows cents (pay per hour). Shows thousands separators once you leave it.
+ * `min` and `max` are applied when you leave the field, and the box shows the number that will really be saved.
+ * Optional $ prefix and a suffix like "per year".
+ */
+export function numberInput(path, { placeholder, prefix, suffix, label, grouped = false, decimals = 0, min, max } = {}) {
+  const el = h('input', { class: 'input', type: 'text', inputmode: decimals ? 'decimal' : 'numeric', placeholder, 'aria-label': label });
+  const show = (v) => (grouped ? fmt(v) : String(v ?? ''));
+  el.value = show(get(S.draft, path));
   el.addEventListener('input', () => {
-    const digits = el.value.replace(/[^\d]/g, '');
-    set(S.draft, path, digits === '' ? '' : Number(digits));
+    let text = el.value.replace(decimals ? /[^\d.]/g : /[^\d]/g, '');
+    if (decimals) {
+      const [whole, ...rest] = text.split('.');
+      text = rest.length ? `${whole}.${rest.join('').slice(0, decimals)}` : whole;
+    }
+    const n = text === '' || text === '.' ? '' : Number(text);
+    set(S.draft, path, n);
     markDirty();
   });
-  if (grouped) el.addEventListener('blur', () => { el.value = fmt(get(S.draft, path)); });
+  el.addEventListener('blur', () => {
+    let v = get(S.draft, path);
+    if (v !== '' && v != null) {
+      if (max != null && v > max) v = max;
+      if (min != null && v < min) v = min;
+      set(S.draft, path, v);
+    }
+    el.value = show(v);
+  });
   if (!prefix && suffix == null) return el;
   const suffixEl = suffix != null ? h('span', { class: 'suffix', 'aria-hidden': 'true' }, suffix) : null;
   const wrap = h('div', { class: `input-affix ${suffixEl ? 'has-suffix' : ''}` }, prefix ? h('span', { class: 'affix', 'aria-hidden': 'true' }, prefix) : null, el, suffixEl);
   wrap.setSuffix = (t) => { if (suffixEl) suffixEl.textContent = t; };
   return wrap;
+}
+
+/** Run a redraw and put keyboard focus back on the same button position, so Space, Tab and arrows keep working. */
+function keepFocus(container, redraw, { fallback } = {}) {
+  const buttons = () => [...container.querySelectorAll('button')];
+  const idx = buttons().indexOf(document.activeElement);
+  redraw();
+  if (idx >= 0) (buttons()[idx] || fallback || buttons().at(-1))?.focus();
 }
 
 /** Toggle chips bound to an array of strings at `path`. */
@@ -107,7 +152,7 @@ export function chipGroup(path, options, { label } = {}) {
           const cur = selected();
           set(S.draft, path, on ? cur.filter((x) => x !== o) : [...cur, o]);
           markDirty();
-          draw();
+          keepFocus(wrap, draw);
         },
       }, icon('check', 14), o);
     }));
@@ -122,13 +167,15 @@ export function tagInput(path, { placeholder, label } = {}) {
   const input = h('input', { class: 'input', type: 'text', placeholder, 'aria-label': label });
   const draw = () => {
     mount(list, ...(get(S.draft, path) || []).map((t) => h('span', { class: 'chip removable' }, t,
-      h('button', { type: 'button', 'aria-label': `Remove ${t}`, onClick: () => { set(S.draft, path, get(S.draft, path).filter((x) => x !== t)); markDirty(); draw(); } }, icon('x', 12)))));
+      h('button', { type: 'button', 'aria-label': `Remove ${t}`, onClick: () => { set(S.draft, path, get(S.draft, path).filter((x) => x !== t)); markDirty(); keepFocus(list, draw, { fallback: input }); if (!list.querySelector('button')) input.focus(); } }, icon('x', 12)))));
   };
   const add = () => {
-    const v = input.value.replace(/,$/, '').trim();
-    if (!v) return;
-    const cur = get(S.draft, path) || [];
-    if (!cur.some((x) => x.toLowerCase() === v.toLowerCase())) set(S.draft, path, [...cur, v]);
+    // Pasting "a, b, c" adds three titles.
+    const parts = input.value.split(',').map((x) => x.trim()).filter(Boolean);
+    if (!parts.length) { input.value = ''; return; }
+    let cur = get(S.draft, path) || [];
+    for (const v of parts) if (!cur.some((x) => x.toLowerCase() === v.toLowerCase())) cur = [...cur, v];
+    set(S.draft, path, cur);
     input.value = '';
     markDirty();
     draw();
@@ -148,10 +195,12 @@ export function tagInput(path, { placeholder, label } = {}) {
 export function segmented(options, value, onChange, { label, size } = {}) {
   const wrap = h('div', { class: `seg ${size || ''}`, role: 'group', 'aria-label': label });
   const draw = (v) => {
-    mount(wrap, ...options.map((o) => h('button', {
-      type: 'button', 'aria-pressed': String(o.value === v),
-      onClick: () => { draw(o.value); onChange(o.value); },
-    }, o.label, o.count != null ? h('span', { class: 'count' }, o.count) : null)));
+    keepFocus(wrap, () => {
+      mount(wrap, ...options.map((o) => h('button', {
+        type: 'button', 'aria-pressed': String(o.value === v),
+        onClick: () => { draw(o.value); onChange(o.value); },
+      }, o.label, o.count != null ? h('span', { class: 'count' }, o.count) : null)));
+    });
   };
   draw(value);
   wrap.redraw = draw;
@@ -189,6 +238,7 @@ export function resumeDropzone() {
   };
   const send = async (file) => {
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast(`That file is ${(file.size / 1048576).toFixed(1)} MB. The limit is 10 MB. Try saving a smaller PDF.`, 'bad'); return; }
     try {
       const r = await uploadResume(file);
       S.draft.about.resumeName = r.resumeName;
@@ -229,6 +279,15 @@ export function sampleTag() {
   return S.info?.demo ? h('span', { class: 'sample-tag' }, icon('info', 14), 'Sample data') : null;
 }
 
+// ---------- notes about your saved data ----------
+/** Plain-language problems the app found with the saved data (an unreadable file, a missing resume). Empty when all is well. */
+export function dataWarnings() {
+  const items = S.info?.warnings || [];
+  if (!items.length) return null;
+  return h('div', { class: 'stack', style: { gap: '8px' }, role: 'status' },
+    ...items.map((w) => h('div', { class: 'inline-alert' }, icon('alert', 18), h('div', {}, w.text))));
+}
+
 // ---------- warnings ----------
 export function warningsCard() {
   const item = (ic, strong, text, cls = '') => h('li', { class: cls }, icon(ic, 18), h('span', {}, h('b', {}, strong), ' ', text));
@@ -255,6 +314,7 @@ export function preflightPanel({ flat = false } = {}) {
     const head = flat
       ? h('div', { class: 'flat-head' }, h('h3', { class: 'section-title' }, 'Requirements'), recheck)
       : h('div', { class: 'panel-head' }, h('h2', {}, 'Requirements'), recheck);
+    const claudeInstalled = pf?.rows?.find((x) => x.id === 'claude')?.status === 'ok';
     let body;
     if (!pf) {
       body = h('div', { class: 'checks' }, ...Array.from({ length: 6 }, () => h('div', { class: 'check-row' }, h('div', { class: 'skeleton', style: { width: '24px', height: '24px', borderRadius: '12px' } }), h('div', { class: 'skeleton', style: { width: '60%' } }))));
@@ -273,6 +333,14 @@ export function preflightPanel({ flat = false } = {}) {
       }) }));
       if (r.status !== 'ok') actions.push(button({ label: 'Get the extension', icon: 'external', size: 'sm', onClick: () => guard(() => POST('/api/open', { target: 'extension' })) }));
     }
+    const running = S.setupJob.status === 'running';
+    if (r.id === 'claude' && r.status !== 'ok') {
+      actions.push(button({ label: 'Install Claude Code', icon: 'download', size: 'sm', kind: 'primary', disabled: running, onClick: () => guard(installClaude) }));
+      actions.push(button({ label: 'Official steps', icon: 'external', size: 'sm', href: r.url || 'https://code.claude.com/docs/en/quickstart', target: '_blank' }));
+    }
+    if (r.id === 'auth' && r.status !== 'ok' && S.preflight?.rows?.find((x) => x.id === 'claude')?.status === 'ok') {
+      actions.push(button({ label: 'Sign in to Claude', icon: 'user', size: 'sm', kind: 'primary', disabled: running, onClick: () => guard(signInToClaude) }));
+    }
     if (r.id === 'linkedin') {
       actions.push(button({ label: 'Open LinkedIn', icon: 'external', size: 'sm', onClick: () => guard(async () => { const o = await POST('/api/open', { target: 'linkedin' }); toast(`Opened in ${o.opened}. Sign in there if you are not already.`); }) }));
     }
@@ -281,12 +349,16 @@ export function preflightPanel({ flat = false } = {}) {
       h('span', {}, h('b', {}, 'I am signed in to LinkedIn'), ' in the same Chrome profile that has the Claude extension. ', h('span', { class: 'faint' }, 'This tool never asks for or stores your LinkedIn password.')),
     ) : null;
     const showFix = r.status !== 'ok' && r.hint;
+    const job = S.setupJob;
+    const mine = (r.id === 'claude' && job.kind === 'install') || (r.id === 'auth' && job.kind === 'login');
+    const showTerm = mine && job.lines.length && job.status !== 'done';
     return h('div', { class: 'check-row' },
       h('div', { class: `ic ${r.status}` }, icon(ROW_ICON[r.status] || 'circle', 14)),
       h('div', {},
         h('div', { class: 'title' }, r.title),
         h('div', { class: 'sum' }, r.summary),
         showFix ? h('div', { class: 'fix' }, r.hint) : null,
+        showTerm ? jobTerminal(job) : null,
       ),
       h('div', { class: 'actions' }, ...actions),
       extra,
@@ -294,7 +366,57 @@ export function preflightPanel({ flat = false } = {}) {
   };
 
   on('preflight', draw);
+  on('setup', () => { draw(); const t = host.querySelector('.term-body'); if (t) t.scrollTop = t.scrollHeight; });
+  on('setup-done', (e) => {
+    const ok = e.status === 'done';
+    toast(ok ? (S.setupJob.kind === 'install' ? 'Claude Code is installed. Checking it now.' : 'Signed in. Checking it now.') : e.status === 'cancelled' ? 'Cancelled.' : 'That did not finish. The output above says why.', ok ? 'ok' : 'bad');
+    loadPreflight().catch(() => {});
+  });
   draw();
   if (!S.preflight && !S.preflightLoading) loadPreflight().catch((e) => toast(e.message, 'bad'));
+  loadSetup().catch(() => {});
   return host;
+}
+
+// ---------- install and sign-in (one-click setup) ----------
+/** Streams what an install or sign-in prints. Plain text only: it is never parsed as HTML. */
+function jobTerminal(job) {
+  const running = job.status === 'running';
+  const title = job.kind === 'install' ? 'Installing Claude Code' : 'Signing in to Claude';
+  const state = running ? 'Working' : job.status === 'failed' ? 'Did not finish' : job.status === 'cancelled' ? 'Cancelled' : 'Done';
+  return h('div', { class: 'term', role: 'group', 'aria-label': title },
+    h('div', { class: 'term-head' },
+      running ? h('span', { class: 'spinner', 'aria-hidden': 'true' }) : icon(job.status === 'failed' ? 'alert' : 'check', 14),
+      h('b', {}, title), h('span', { class: 'faint' }, state),
+      running ? button({ label: 'Cancel', size: 'sm', kind: 'ghost', onClick: () => guard(() => POST('/api/setup/cancel')) }) : null),
+    h('div', { class: 'term-body', role: 'log', 'aria-live': 'polite', tabindex: '0' }, ...job.lines.slice(-120).map((l) => h('div', {}, l))),
+    running && job.kind === 'install' ? h('div', { class: 'hint' }, 'The installer shows no progress while it downloads. This can take a minute or two.') : null,
+    running && job.kind === 'login' ? h('div', { class: 'hint' }, 'A browser window should open. Sign in there with your Claude account. If nothing opens, copy a link from the lines above into your browser.') : null);
+}
+
+async function installClaude() {
+  const info = S.setup || (await loadSetup());
+  const c = info.install;
+  const ok = await confirmDialog({
+    title: 'Install Claude Code?',
+    body: [
+      h('p', { class: 'muted' }, `This runs Anthropic's official installer on this computer, in ${c.shell}. It is the same command their setup guide tells you to paste into a terminal:`),
+      h('pre', { class: 'cmd' }, c.display),
+      h('p', { class: 'hint' }, 'Source: ', h('a', { href: c.source, target: '_blank', rel: 'noopener noreferrer' }, c.source)),
+      h('p', { class: 'hint' }, 'It only runs when you press the button below. Nothing else is installed or changed by this app.'),
+    ],
+    confirmLabel: 'Run the installer', confirmIcon: 'download',
+  });
+  if (!ok) return;
+  S.setupJob = { status: 'running', kind: 'install', lines: [], command: c.display };
+  emit('setup');
+  const r = await POST('/api/setup/install', { confirm: true });
+  S.setupJob = { ...S.setupJob, id: r.job.id };
+}
+
+async function signInToClaude() {
+  S.setupJob = { status: 'running', kind: 'login', lines: [] };
+  emit('setup');
+  const r = await POST('/api/setup/login');
+  S.setupJob = { ...S.setupJob, id: r.job.id };
 }

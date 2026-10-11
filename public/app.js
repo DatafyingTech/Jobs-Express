@@ -1,7 +1,7 @@
 // Jobs Express: front end entry. Vanilla modules, no build step.
 import { h, mount } from './js/dom.js';
 import { icon, brandMark } from './js/icons.js';
-import { S, emit, on, clearSubs, loadInfo, loadApps, loadHeld } from './js/state.js';
+import { S, emit, on, clearSubs, loadInfo, loadApps, loadHeld, applySetupEvent } from './js/state.js';
 import { connectEvents, POST, GET } from './js/api.js';
 import { parseRoute, go } from './js/router.js';
 import { toast, sampleTag } from './js/components.js';
@@ -126,6 +126,17 @@ function onEvent(name, data) {
     case 'records':
       loadApps(); loadHeld();
       break;
+    case 'setup':
+      applySetupEvent(data);
+      break;
+    case 'schedule':
+      if (data.line) { S.scheduleLines.push(data.line); if (S.scheduleLines.length > 300) S.scheduleLines.shift(); }
+      emit('schedule-line', data);
+      if (data.done) {
+        loadInfo(); loadApps(); loadHeld();
+        emit('schedule-done', data);
+      }
+      break;
     case 'connection':
       if (S.connected !== data.ok) { S.connected = data.ok; drawShellBits(); }
       break;
@@ -162,7 +173,12 @@ async function boot() {
     } catch { /* ignore */ }
   }
 
-  window.addEventListener('hashchange', render);
+  // Move keyboard focus to the new page after a navigation, so Continue by keyboard does not strand you at the top.
+  window.addEventListener('hashchange', () => { render(); mainHost.focus({ preventScroll: true }); });
+  // A theme picked in another tab applies here too.
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'cja-theme' && (e.newValue === 'light' || e.newValue === 'dark')) { document.documentElement.dataset.theme = e.newValue; drawShellBits(); }
+  });
   render();
 }
 

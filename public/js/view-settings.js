@@ -1,13 +1,15 @@
 import { h, mount } from './dom.js';
 import { icon } from './icons.js';
 import { S, on, saveDraft, resetDraft, loadInfo, clone, markDirty } from './state.js';
-import { PUT } from './api.js';
-import { button, guard, toast, field, preflightPanel, warningsCard, numberInput, emptyState } from './components.js';
+import { POST } from './api.js';
+import { button, guard, toast, field, preflightPanel, warningsCard, numberInput, emptyState, dataWarnings } from './components.js';
 import { aboutSection, prefsSection, honestSection } from './forms.js';
 import { go } from './router.js';
+import { schedulePanels } from './view-schedule.js';
 
 const TABS = [
   { key: 'requirements', label: 'Requirements', ic: 'shield' },
+  { key: 'schedule', label: 'Daily schedule', ic: 'clock' },
   { key: 'about', label: 'About you', ic: 'user' },
   { key: 'preferences', label: 'Job preferences', ic: 'sliders' },
   { key: 'honest', label: 'Honest profile', ic: 'file' },
@@ -29,6 +31,10 @@ export function settingsView(arg) {
       editable = false;
       content = h('div', { class: 'stack' }, warningsCard(), preflightPanel());
       break;
+    case 'schedule':
+      editable = false;
+      content = schedulePanels();
+      break;
     case 'about': content = panel('About you', aboutSection()); break;
     case 'preferences': content = panel('Job preferences', prefsSection()); break;
     case 'honest': content = panel('Your honest profile', honestSection()); break;
@@ -47,6 +53,7 @@ export function settingsView(arg) {
   return {
     el: h('div', {},
       h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Settings'), h('p', {}, 'Everything you told the setup wizard, editable. Saved in a file on this computer.'))),
+      dataWarnings(),
       h('div', { class: 'settings' }, nav, h('div', { style: { minWidth: 0 } }, content, editable ? savebar : null))),
   };
 }
@@ -58,11 +65,9 @@ function panel(title, sections) {
 function answersPanel() {
   const host = h('section', { class: 'panel' });
   async function remove(q) {
-    const next = S.info.profile.qa.filter((x) => x.q !== q.q);
     await guard(async () => {
-      const profile = clone(S.info.profile);
-      profile.qa = next;
-      S.info.profile = await PUT('/api/profile', profile);
+      // Remove just this answer on the server. Sending the whole profile back could undo answers saved from another tab.
+      await POST('/api/answers/remove', { q: q.q });
       await loadInfo();
       draw();
       toast('Removed.');
@@ -89,8 +94,8 @@ function limitsPanel() {
       h('div', { class: 'fieldset' },
         h('p', { class: 'lede' }, 'Every run is capped so a stuck agent cannot go on forever. When a cap is reached the agents are stopped and what they finished is kept.'),
         h('div', { class: 'grid two' },
-          field('Stop a run after (minutes)', numberInput('settings.maxMinutes'), { hint: '5 to 240. Default 45.' }),
-          field('Stop an agent after (actions)', numberInput('settings.maxTurns'), { hint: 'Browser clicks, reads and typing each count as one action. Default 200.' })))),
+          field('Stop a run after (minutes)', numberInput('settings.maxMinutes', { min: 5, max: 240 }), { hint: '5 to 240. Default 45.' }),
+          field('Stop an agent after (actions)', numberInput('settings.maxTurns', { min: 20, max: 1000 }), { hint: 'Browser clicks, reads and typing each count as one action. Default 200.' })))),
     h('section', { class: 'panel' },
       h('div', { class: 'panel-head' }, h('h2', {}, 'Your data')),
       h('div', { class: 'fieldset' },
