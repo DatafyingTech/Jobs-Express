@@ -15,7 +15,7 @@ const WIDTHS = [360, 390, 768, 1440];
 const ROUTES = [
   '#/setup/1', '#/setup/2', '#/setup/3', '#/setup/4', '#/setup/5',
   '#/', '#/applications', '#/input',
-  '#/settings/requirements', '#/settings/about', '#/settings/preferences', '#/settings/honest', '#/settings/answers', '#/settings/limits',
+  '#/settings/requirements', '#/settings/schedule', '#/settings/about', '#/settings/preferences', '#/settings/honest', '#/settings/answers', '#/settings/limits',
 ];
 
 const pw = await loadPlaywright();

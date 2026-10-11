@@ -1,6 +1,7 @@
 #!/bin/bash
 # Double-click this file on macOS to start Jobs Express.
-# If macOS says it cannot be opened: right-click it, choose Open, then Open again.
+# If macOS says it cannot be opened: right-click it and choose Open, then confirm. On macOS 15 and newer that
+# bypass is gone: try to open it once, then go to System Settings, Privacy & Security, and choose Open Anyway.
 # If nothing happens, run once in Terminal:  chmod +x start.command
 cd "$(dirname "$0")" || exit 1
 
@@ -8,6 +9,13 @@ echo
 echo "  Jobs Express"
 echo "  ------------"
 echo
+
+if [ ! -f server.mjs ]; then
+  echo "  Some files are missing: start.command must sit next to server.mjs and the lib folder."
+  echo "  If you downloaded a ZIP, extract the whole ZIP first (double-click it in Finder), then open start.command from the new folder."
+  read -r -p "  Press Return to close. " _
+  exit 2
+fi
 
 need_node() {
   echo "  $1"

@@ -8,19 +8,20 @@ on:
 
 jobs:
   node-tests:
-    name: node tests (${{ matrix.os }}, node 20)
+    name: node tests (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 20, 22]
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
 
       # There is nothing to install: the project has no dependencies.
       - name: Run tests

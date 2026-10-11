@@ -2,7 +2,7 @@
 
 # Jobs Express
 
-**Set it up once. Press Start. Parallel Claude agents fill out job applications in your own Chrome, and only ever tell the truth.**
+**Set it up once. Press Start, or let it run itself every morning. Parallel Claude agents fill out job applications in your own Chrome, and only ever tell the truth.**
 
 A free, local, one-click web app that puts Claude Code to work on your job search.
 Your data stays on your computer. Anything an agent cannot answer honestly is held for you instead of guessed.
@@ -41,6 +41,10 @@ The part that makes it different is what the agents will not do:
 - In **Practice mode** they fill every form and stop before the final Submit, so you can look first.
 - They never create accounts, type passwords, click CAPTCHAs, read your email, or message anyone for you.
 
+Once you trust what Practice mode does, you can **set a daily schedule**: pick a time, and every day the app opens
+Chrome if needed, looks only at roles posted in the last day or so, applies to every honest fit, and leaves a short
+digest of what it did. See [Run it every day](#run-it-every-day).
+
 ### Why not just use an auto-apply bot?
 
 Plenty of paid services will blast out hundreds of applications a week. Some are fine. Many answer
@@ -66,6 +70,11 @@ stand behind.
 
 - **One click to start.** Double-click `Start.bat` (Windows), `start.command` (macOS) or run `./start.sh`
   (Linux). It checks Node, starts a small local server, and opens the app in your browser.
+- **A daily schedule.** Set a time once. Windows Task Scheduler, macOS launchd or a Linux systemd timer starts the
+  run for you, even if this app is closed. A digest lands in the app after every run.
+- **Claude Code can be installed and signed in from inside the app.** Two buttons in the requirements step run
+  Anthropic's official installer and `claude auth login`, after showing you the exact command. No API keys: you
+  sign in with your normal Claude subscription.
 - **A setup wizard you only do once.** Contact details, resume, the roles and pay you want, and an
   honest list of the facts agents may claim. Everything is editable later in Settings.
 - **Requirements checks that explain themselves.** Is Claude Code installed? Signed in with the right
@@ -92,9 +101,17 @@ stand behind.
 |---|---|
 | ![The dashboard during a practice run](docs/images/05-dashboard-live-run.png) | ![The applications table](docs/images/06-applications.png) |
 
-| On a phone | Dark theme |
+| The daily schedule | A morning digest |
 |---|---|
-| <img src="docs/images/09-phone-dashboard.png" alt="Phone layout" width="260"> | ![Dark theme](docs/images/08-dashboard-dark.png) |
+| ![Daily schedule settings](docs/images/11-daily-schedule.png) | ![A daily digest, opened](docs/images/12-daily-digest.png) |
+
+| Install Claude Code from inside the app | On a phone |
+|---|---|
+| ![The install confirmation shows the exact official command](docs/images/14-install-claude.png) | <img src="docs/images/13-phone-schedule.png" alt="The schedule on a phone" width="260"> |
+
+| Dark theme |
+|---|
+| ![Dark theme](docs/images/08-dashboard-dark.png) |
 
 All sample data, all made up.
 
@@ -107,10 +124,16 @@ All sample data, all made up.
    Or `git clone https://github.com/DatafyingTech/Jobs-Express.git`.
 2. **Double-click the launcher for your computer.**
    - Windows: **`Start.bat`**. If Node.js is missing it offers to install it with `winget`.
-   - macOS: **`start.command`**. If macOS refuses, right-click it, choose **Open**, then **Open** again.
-     If nothing happens, run `chmod +x start.command` once in Terminal.
+   - macOS: **`start.command`**. If macOS refuses, right-click it, choose **Open**, then confirm. On macOS 15
+     (Sequoia) and newer that shortcut no longer works: try to open it once, then go to **System Settings, Privacy &
+     Security** and choose **Open Anyway**. If nothing happens, run `chmod +x start.command` once in Terminal.
+     (Not tested on a real Mac by the author.)
    - Linux: **`./start.sh`**.
    - Anywhere: `npm start` or `node server.mjs`.
+   - Windows may show a blue "Windows protected your PC" (SmartScreen) page for a downloaded ZIP. Choose **More
+     info, Run anyway** if you downloaded it from this repository.
+   - **Extract the whole ZIP first** (right-click, Extract All). Running `Start.bat` from inside the ZIP window does
+     not work, and the launcher says so.
 3. **Follow the wizard.** Your browser opens to the app. The first screen checks your computer and walks
    you through anything missing. Then answer the questions, run a **Practice** batch, and look at what
    it did before you ever switch to Live.
@@ -128,15 +151,57 @@ computer.
 
 |  | You need |
 |---|---|
-| **Node.js** | Version 18 or newer ([nodejs.org](https://nodejs.org), the LTS release is fine) |
-| **Claude Code** | Installed and working. See the [quickstart](https://code.claude.com/docs/en/quickstart) |
-| **A claude.ai plan** | Pro, Max, Team or Enterprise, **signed in with `claude auth login`**. API-key logins do not enable the Chrome integration |
+| **Node.js** | Version 18 or newer ([nodejs.org](https://nodejs.org), the LTS release is fine). The tests run on Node 18, 20 and 22 in CI |
+| **Claude Code** | Installed and working. **You can install it from inside the app**: the requirements step has an **Install Claude Code** button that runs Anthropic's official installer (it shows you the exact command and its source, [the quickstart](https://code.claude.com/docs/en/quickstart), and runs only when you press the button) |
+| **A claude.ai plan** | Pro, Max, Team or Enterprise. **No API keys needed: you sign in with your normal Claude subscription**, from inside the app with the **Sign in to Claude** button (it runs `claude auth login --claudeai` and opens your browser). API-key logins do not enable the Chrome integration |
 | **A browser** | Google Chrome or Microsoft Edge |
 | **The extension** | [Claude in Chrome](https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn), version 1.0.36 or newer, installed and **signed in to the same claude.ai account** |
 | **LinkedIn** | If you use LinkedIn Easy Apply: signed in, by you, in that same Chrome profile |
 | **OS** | Windows 10/11, macOS, or desktop Linux. **WSL is not supported** by the Chrome integration |
 
-The app checks all of this on the first screen and tells you what to fix. You do not need to memorize it.
+The app checks all of this on the first screen and tells you what to fix. You do not need to memorize it. The
+Chrome extension step stays manual on purpose: install it from the Chrome Web Store (the app has a direct link),
+sign in, and press **Test connection**.
+
+---
+
+## Run it every day
+
+**Settings, Daily schedule.** Pick a time, whether it is every day or weekdays, Practice or Live, how many agents
+(1 to 3), the most applications per run (default 10, hard maximum 25), how fresh a posting has to be (default 30
+hours), and a time cap (default 90 minutes). Press **Save schedule**. The app registers a job with your operating
+system that runs `node server.mjs --scheduled-run` at that time:
+
+| System | What is created | If the computer was off or asleep |
+|---|---|---|
+| Windows | A Task Scheduler task named `JobsExpressDaily`, run only while you are signed in | Starts when the PC wakes (`StartWhenAvailable`, and it may wake the PC) |
+| macOS | A launchd agent in `~/Library/LaunchAgents` | launchd runs it when the Mac wakes. A Mac that was shut down does not catch up |
+| Linux | A systemd user timer with `Persistent=true`, or a crontab line if systemd user timers are not available | systemd catches up at next start. Cron does not |
+
+**What has to be true for it to run, honestly:**
+
+- The computer is **on** and **you are signed in** to it (a locked screen is fine). It drives your own desktop Chrome,
+  so a signed-out or shut-down machine cannot run it. On Windows a console window shows while it runs. Leave it alone.
+- **Chrome has the Claude extension installed and signed in**, and **LinkedIn is signed in** in that profile. The run
+  starts Chrome if it is closed, but it never signs in for you. If a prerequisite is missing it writes a "did not
+  run" digest that says what to fix, and exits.
+- Only **one run at a time**: a scheduled run skips itself while you are running something by hand, and the other way
+  round.
+- **Practice is the default.** Live needs a tick in a box that says "I have reviewed Practice results and accept that
+  applications will be submitted automatically". Start with Practice, read a few digests, then decide.
+- **The freshness window is not a quota.** Only roles posted in the last N hours are considered, and the agents apply
+  to every honest fit and never pad the run with weaker matches. Zero applications is a normal result.
+- If you move this folder or update Node.js, press **Save schedule** again. The Status box warns you when the job is
+  out of date.
+
+**Run a test now** starts a small Practice run (up to 3 applications, 30 minutes) through exactly the same steps, so
+you find problems at 2 p.m. instead of 4 a.m. From a terminal, `node server.mjs --scheduled-run --dry-run` prints what
+a run would do and what would stop it, without launching anything (add `--json` for machine-readable output).
+
+Every run leaves `data/digests/YYYY-MM-DD.md` and `.json`, and the same list appears in the app under **Daily
+digests**. Anything an agent could not answer, including a site that emailed a verification code, appears under
+**Needs your input** with the company, the role and a link, so you can finish it yourself. The agents never read your
+email.
 
 ---
 
@@ -147,6 +212,7 @@ flowchart LR
     You([You]) -->|answer once| Wizard[Setup wizard]
     Wizard -->|saves| Profile[(data/profile.json<br/>on your computer)]
     You -->|Start applying| Server[Local server<br/>127.0.0.1 only]
+    Sched[Task Scheduler, launchd<br/>or systemd timer] -->|once a day| Server
     Server -->|builds prompts from| Profile
     Server -->|spawns 1 to 3| Agents[claude -p --chrome<br/>one process per agent]
     Agents -->|drive| Chrome[Your Chrome<br/>with Claude in Chrome]
@@ -162,10 +228,13 @@ flowchart LR
 2. When you press Start, the app writes one prompt per agent: shared honesty rules, a guide for each
    source, your profile, and a mode block (Practice stops before Submit). The prompt is sent to Claude
    Code on standard input, so it never appears on a command line.
-3. Each agent is `claude -p --chrome` with a deliberately small toolbox: the Chrome tools, `Read`,
-   `WebFetch`, `WebSearch`, and a single allowed shell command, `node tools/log.mjs`. It never runs with
-   `--dangerously-skip-permissions`, and your other Claude connectors (mail, drive, chat) are switched off
-   for these runs.
+3. Each agent is `claude -p --chrome` with a deliberately small toolbox: a named list of Chrome tools (no page
+   scripts, no screenshot uploads), `WebFetch` for the public job feeds only, `WebSearch`, and a single allowed shell
+   command, `node tools/log.mjs`. There is no file-reading or file-writing tool. It never runs with
+   `--dangerously-skip-permissions`, it never prompts (anything not on the list is denied), your own Claude
+   settings and hooks are ignored for these runs, your other connectors (mail, drive, chat) are switched off, and the
+   agent only inherits an allow-list of environment variables, never tokens or keys. Each agent also runs under a
+   small guard that stops it if the app is closed or killed.
 4. Agents record every outcome with `tools/log.mjs`. The dashboard reads those files and streams the
    agents' progress live.
 5. Questions an agent cannot answer land in **Needs your input**. Your answer is saved into the profile's
@@ -189,6 +258,8 @@ you are welcome to improve them.
 - **Be signed in yourself.** You sign in to LinkedIn, in the same Chrome profile that has the Claude
   extension. The extension has to be installed and signed in too. The app never asks for, sees, or stores
   your passwords.
+- **Unattended runs are still your responsibility.** A scheduled Live run submits applications while you are away.
+  Read the digests, and switch back to Practice the moment anything looks off.
 - **Do not use that Chrome profile during a run.** The agents share it, and your clicks can collide with
   theirs. Keep the Chrome window open until the run finishes.
 - **What the agents will never do:** create accounts, set or enter passwords, click CAPTCHAs, enter emailed
@@ -208,11 +279,18 @@ This is a personal tool, not a service, and it comes with no warranty (see [LICE
   the applications table, the held questions, and run logs. It is in `.gitignore`. To delete everything, close the
   app and delete that folder.
 - **This app has no servers, no account, no telemetry, and no analytics.** The local server only listens on
-  `127.0.0.1`, and it rejects requests that do not come from the app's own page.
+  `127.0.0.1`. It answers only requests for its own address and port (so a web page cannot reach it through DNS
+  rebinding), only accepts changes that come from its own page, and needs a random per-launch token that only that
+  page has (so a website you visit cannot start agents or read your data). Your data folder is private to your
+  user account (mode 0700 on macOS and Linux, a restricted ACL on Windows).
 - **What leaves your computer, and where it goes:**
   - Claude Code sends your prompt (which includes your profile) and what the agent reads in the browser to
     Anthropic, as it does for any Claude Code session. See Anthropic's
-    [data usage](https://code.claude.com/docs/en/data-usage) page.
+    [data usage](https://code.claude.com/docs/en/data-usage) page. **Test connection**, and the connection check
+    before each scheduled run, also make a tiny real Claude request.
+  - The agents can use **WebFetch** (only the public job-board feeds and Hacker News) and **WebSearch**, so search
+    terms such as job titles, and the addresses of those feeds, go out too. They are told never to put your
+    personal details in a search or a URL.
   - The Chrome extension acts on the sites you ask it to, using your signed-in sessions.
   - The job sites you apply to receive the application, including your resume.
 - **Nothing else.** The app does not upload your profile or resume anywhere itself.
@@ -225,7 +303,9 @@ This is a personal tool, not a service, and it comes with no warranty (see [LICE
 
 | What you see | What to do |
 |---|---|
-| **"Claude Code was not found"** | Install it from the [quickstart](https://code.claude.com/docs/en/quickstart), open a new terminal, run `claude --version`, then press **Re-check** |
+| **"Claude Code was not found"** | Press **Install Claude Code** in the requirements step (or install it from the [quickstart](https://code.claude.com/docs/en/quickstart), open a new terminal, run `claude --version`), then press **Re-check** |
+| **The daily run did nothing** | Open Settings, Daily schedule: the newest digest says what stopped it (Chrome's extension signed out, LinkedIn not confirmed, Claude signed out, the computer was off). `data/scheduled-run.log` has the full text |
+| **The schedule says it is out of date** | You moved the folder or updated Node.js. Press **Save schedule** again |
 | **"Claude Code is using an API key"** | The Chrome integration needs a claude.ai login. Unset `ANTHROPIC_API_KEY`, run `claude auth login`, choose the claude.ai option. The app also strips API-key variables from the agents' environment |
 | **Test connection fails** | Install the Claude extension (1.0.36+), open it and sign in with the same account, **close every Chrome window and open Chrome once more** (it reads its connection settings at startup), then test again |
 | **"Receiving end does not exist"** or it works then stops | The extension's background worker went idle. In Claude Code run `/chrome` and choose **Reconnect extension**, or toggle the extension off and on in `chrome://extensions` |
@@ -266,7 +346,14 @@ other Chromium browsers, but this app only checks for Chrome and Edge.
 The agents get a short allow-list of tools instead.
 
 **Does it send emails or messages?** Never. It does not read your email either. If a site wants an emailed code,
-the application is held for you.
+the application is held for you: it shows up in **Needs your input** with the company, the role and a link, and you
+enter the code yourself.
+
+**Do I need an API key?** No. You sign in with your Claude subscription (Pro, Max, Team or Enterprise). API keys
+do not work with the Chrome integration, and the app removes them from the agents' environment.
+
+**Can it run while I am away from the computer?** Yes, if the computer is on and signed in. See
+[Run it every day](#run-it-every-day) for the honest list of conditions.
 
 **How do I update it?** Download the new ZIP and copy your old `data/` folder next to it, or `git pull`.
 
@@ -277,6 +364,7 @@ the application is held for you.
 ```
 node --test            # run the tests (no install step)
 node server.mjs --demo # the UI with sample data
+node server.mjs --scheduled-run --dry-run   # what a daily run would do, launching nothing
 node tools/record_demo.mjs   # re-render docs/images (Playwright or headless Chrome/Edge, plus ffmpeg for the GIF)
 node tools/check_layout.mjs  # needs Playwright: fails if any page scrolls sideways at 360, 390, 768 or 1440 px
 ```

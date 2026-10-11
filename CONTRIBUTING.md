@@ -22,9 +22,11 @@ build step. A dev-only tool may use Playwright if it is present (see `tools/reco
   ("Alex Rivera", fictional companies) and labeled as sample data in the interface.
 - **Never use `--dangerously-skip-permissions`**, and do not widen the agents' tool allow-list in
   `lib/runner.mjs` without a very good reason written in the pull request. Bash stays limited to
-  `node tools/log.mjs`.
+  `node tools/log.mjs`, there is no `Read`, `Edit` or `Write`, and every Chrome tool is named.
+- **Nothing the app runs is built from free text.** The scheduler passes values to the operating system through
+  validated fields or environment variables, never by splicing text into a command.
 - **Everything stays local.** No telemetry, no remote calls from the app itself.
-- **The server stays on `127.0.0.1`** and keeps its Host and `X-CJA` header checks.
+- **The server stays on `127.0.0.1`** and keeps its Host, Origin, `X-CJA` and per-launch token checks, with no CORS.
 - **Prompt changes need tests.** `tests/prompts.test.mjs` pins the hard stops, the hold rule, and the Practice
   mode "stop before Submit" wording. If you change those on purpose, update the tests and say why.
 - Style: plain ES modules, two-space indent, no framework. In the UI, follow the tokens at the top of

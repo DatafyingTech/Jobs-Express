@@ -14,6 +14,12 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
   echo
 fi
 
+if [ ! -f server.mjs ]; then
+  echo "  Some files are missing: start.sh must sit next to server.mjs and the lib folder."
+  echo "  If you downloaded a ZIP, extract the whole ZIP first, then run this from the new folder."
+  exit 2
+fi
+
 if ! command -v node >/dev/null 2>&1; then
   echo "  Node.js is not installed. Install the LTS version from https://nodejs.org"
   echo "  or with your package manager (for example: sudo apt install nodejs), then run this again."
