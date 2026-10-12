@@ -180,6 +180,7 @@ system that runs `node server.mjs --scheduled-run` at that time:
 
 **What has to be true for it to run, honestly:**
 
+- On Windows, Claude Code also wants **Git for Windows** (Git Bash). The requirements step warns if it is missing.
 - The computer is **on** and **you are signed in** to it (a locked screen is fine). It drives your own desktop Chrome,
   so a signed-out or shut-down machine cannot run it. On Windows a console window shows while it runs. Leave it alone.
 - **Chrome has the Claude extension installed and signed in**, and **LinkedIn is signed in** in that profile. The run
@@ -198,7 +199,7 @@ system that runs `node server.mjs --scheduled-run` at that time:
 you find problems at 2 p.m. instead of 4 a.m. From a terminal, `node server.mjs --scheduled-run --dry-run` prints what
 a run would do and what would stop it, without launching anything (add `--json` for machine-readable output).
 
-Every run leaves `data/digests/YYYY-MM-DD.md` and `.json`, and the same list appears in the app under **Daily
+Every run leaves `digests/YYYY-MM-DD.md` and `.json` in your data folder, and the same list appears in the app under **Daily
 digests**. Anything an agent could not answer, including a site that emailed a verification code, appears under
 **Needs your input** with the company, the role and a link, so you can finish it yourself. The agents never read your
 email.
@@ -210,7 +211,7 @@ email.
 ```mermaid
 flowchart LR
     You([You]) -->|answer once| Wizard[Setup wizard]
-    Wizard -->|saves| Profile[(data/profile.json<br/>on your computer)]
+    Wizard -->|saves| Profile[(profile.json<br/>in your data folder)]
     You -->|Start applying| Server[Local server<br/>127.0.0.1 only]
     Sched[Task Scheduler, launchd<br/>or systemd timer] -->|once a day| Server
     Server -->|builds prompts from| Profile
@@ -223,7 +224,7 @@ flowchart LR
     Dash -->|your answers| Profile
 ```
 
-1. Your answers are saved to `data/profile.json`. That file is the **only** source of facts the agents
+1. Your answers are saved to `profile.json` in your data folder. That file is the **only** source of facts the agents
    may claim.
 2. When you press Start, the app writes one prompt per agent: shared honesty rules, a guide for each
    source, your profile, and a mode block (Practice stops before Submit). The prompt is sent to Claude
@@ -275,14 +276,19 @@ This is a personal tool, not a service, and it comes with no warranty (see [LICE
 
 ## Privacy
 
-- **Your data is a folder.** Everything lives in `data/` next to the app: your profile, a copy of your resume,
-  the applications table, the held questions, and run logs. It is in `.gitignore`. To delete everything, close the
-  app and delete that folder.
+- **Your data is a folder, outside the app folder.** On Windows it is `%LOCALAPPDATA%\JobsExpress`, on macOS and Linux
+  `~/.jobs-express` (or wherever `CJA_DATA_DIR` points). It holds your profile, a copy of your resume, the applications
+  table, the held questions, digests and run logs. Keeping it out of the app folder keeps the agents, which work
+  inside the app folder, away from it. If you used 1.0, its `data/` folder is moved there automatically the first
+  time you start 1.1. To delete everything, close the app and delete that folder.
 - **This app has no servers, no account, no telemetry, and no analytics.** The local server only listens on
   `127.0.0.1`. It answers only requests for its own address and port (so a web page cannot reach it through DNS
-  rebinding), only accepts changes that come from its own page, and needs a random per-launch token that only that
-  page has (so a website you visit cannot start agents or read your data). Your data folder is private to your
-  user account (mode 0700 on macOS and Linux, a restricted ACL on Windows).
+  rebinding), only accepts changes that come from its own page, and gives a session only to the window the launcher
+  opens: the launcher opens a one-time link that sets a private cookie, and the page itself contains no secret. A
+  website you visit, or another program or user on this computer, therefore cannot start agents or read your data
+  by just asking the server for its page. A folder the app creates is private to your user account (mode 0700 on
+  macOS and Linux, a restricted ACL on Windows); an existing folder you point it at is left alone and the app tells you
+  if other accounts can read it.
 - **What leaves your computer, and where it goes:**
   - Claude Code sends your prompt (which includes your profile) and what the agent reads in the browser to
     Anthropic, as it does for any Claude Code session. See Anthropic's
@@ -304,7 +310,7 @@ This is a personal tool, not a service, and it comes with no warranty (see [LICE
 | What you see | What to do |
 |---|---|
 | **"Claude Code was not found"** | Press **Install Claude Code** in the requirements step (or install it from the [quickstart](https://code.claude.com/docs/en/quickstart), open a new terminal, run `claude --version`), then press **Re-check** |
-| **The daily run did nothing** | Open Settings, Daily schedule: the newest digest says what stopped it (Chrome's extension signed out, LinkedIn not confirmed, Claude signed out, the computer was off). `data/scheduled-run.log` has the full text |
+| **The daily run did nothing** | Open Settings, Daily schedule: the newest digest says what stopped it (Chrome's extension signed out, LinkedIn not confirmed, Claude signed out, the computer was off). `scheduled-run.log` in your data folder has the full text |
 | **The schedule says it is out of date** | You moved the folder or updated Node.js. Press **Save schedule** again |
 | **"Claude Code is using an API key"** | The Chrome integration needs a claude.ai login. Unset `ANTHROPIC_API_KEY`, run `claude auth login`, choose the claude.ai option. The app also strips API-key variables from the agents' environment |
 | **Test connection fails** | Install the Claude extension (1.0.36+), open it and sign in with the same account, **close every Chrome window and open Chrome once more** (it reads its connection settings at startup), then test again |
@@ -315,7 +321,8 @@ This is a personal tool, not a service, and it comes with no warranty (see [LICE
 | **macOS will not open `start.command`** | Right-click, **Open**. Or in Terminal: `chmod +x start.command` |
 | **Port in use** | The app picks the next free port automatically and prints the address |
 | **A run stopped by itself** | Runs have a time cap (45 minutes) and an action cap per agent (200). Change them in Settings, Run limits |
-| **Where are the logs?** | `data/runs/<run id>/` has a readable `run.log` and each agent's raw output |
+| **Where are the logs?** | `runs/<run id>/` in your data folder has a readable `run.log` and each agent's raw output. The newest 20 runs are kept |
+| **"This window was not opened by Jobs Express"** | The page needs the one-time link the launcher opens. Close the tab and start the app again. If it is already running, starting it again opens the right window |
 
 ---
 
@@ -355,7 +362,7 @@ do not work with the Chrome integration, and the app removes them from the agent
 **Can it run while I am away from the computer?** Yes, if the computer is on and signed in. See
 [Run it every day](#run-it-every-day) for the honest list of conditions.
 
-**How do I update it?** Download the new ZIP and copy your old `data/` folder next to it, or `git pull`.
+**How do I update it?** Download the new ZIP (or `git pull`) and start it. Your data lives outside the app folder, so there is nothing to copy. If you ran 1.0, its `data/` folder is moved out of the app folder for you the first time.
 
 ---
 

@@ -47,7 +47,7 @@ applications per run (default 10, never more than 25), the freshness window (def
   answer, then starts the agents with a prompt that only looks at postings from the last N hours. There is no quota:
   the agents apply to every honest fit inside the window and never pad. When the time cap passes, the agents and
   everything they started are killed and what finished is kept.
-- **The digest.** Every run writes `data/digests/YYYY-MM-DD.md` and `.json` and updates `data/schedule.json`
+- **The digest.** Every run writes `digests/YYYY-MM-DD.md` and `.json` and updates `schedule.json`, in your data folder,
   (`lastRun`: when it started and finished, the status, how many were submitted, ready, held and skipped, and any
   error). If a prerequisite is missing, the digest says "did not run" with a plain fix and the process exits non-zero.
 - **Run a test now** is a small Practice run (3 applications, 30 minutes) through the same steps. Its dialog first shows
@@ -111,13 +111,17 @@ node tools/log.mjs check --claim --company "..." --role "..." --url "..."
 `check --claim` also marks the posting as being worked on, so two agents never fill in the same application. In a Live
 run a posting that was only filled in during Practice is not a duplicate: it is the one to submit.
 
-That appends a JSON line to `data/applications.jsonl` (and `data/held.jsonl` for held questions). The dashboard reads
+That appends a JSON line to `applications.jsonl` (and `held.jsonl` for held questions) in your data folder. The dashboard reads
 those files. Because it is a plain append-only file, you can read it, back it up, or load it into a spreadsheet.
 
 ## The data folder
 
+By default `%LOCALAPPDATA%\JobsExpress` on Windows and `~/.jobs-express` on macOS and Linux, outside the app folder
+(the agents work inside the app folder, so this keeps your profile and transcripts out of their reach). A 1.0
+install's `./data` folder is moved there the first time you start 1.1.
+
 ```
-data/
+(data folder)
   profile.json         your answers and saved Q&A
   state.json           your last connection test and LinkedIn confirmation
   schedule.json        your daily schedule and the result of the last run
@@ -131,7 +135,9 @@ data/
   runs/<id>/           run.log (readable) and agent-N.jsonl (raw output); the newest 20 runs are kept
 ```
 
-The folder is private to your user account. Set `CJA_DATA_DIR` (or pass `--data-dir`) to keep it somewhere else.
+A folder the app creates is private to your user account. A folder you pick yourself with `CJA_DATA_DIR` (or `--data-dir`)
+is not touched; the app only tells you if other accounts can read it. `.launch` in it holds the one-time code a second
+launch uses to open the running copy.
 If `profile.json` ever cannot be read, it is kept as `profile.json.corrupt-<time>` and the app tells you.
 
 ## Command-line options
@@ -145,6 +151,9 @@ node server.mjs --data-dir D:\JobsData   use another data folder
 node server.mjs --scheduled-run             what the daily job runs (no window)
 node server.mjs --scheduled-run --dry-run   print what it would do, launch nothing (--json for machine output)
 ```
+
+Starting the app a second time while it is running opens the running copy through a fresh one-time link, and tells you
+the data folder it is using.
 
 Environment variables: `CJA_DATA_DIR`, `CJA_NO_OPEN=1`, `CJA_CLAUDE` (full path to the `claude` program),
 `CJA_PLAYWRIGHT_DIR` (dev tools only), `CJA_SCHEDULE_TASK_NAME` (testing: a name like `JobsExpressDaily-TEST-abc123`).
@@ -162,4 +171,5 @@ Environment variables: `CJA_DATA_DIR`, `CJA_NO_OPEN=1`, `CJA_CLAUDE` (full path 
 - Your own Claude Code settings, hooks and plugins are **not** loaded for agent runs (`--setting-sources project`), and
   nothing outside the allow-list can run (`dontAsk`). That is deliberate: a broad allow rule in your own settings would
   otherwise let a malicious job posting run commands on your computer. Environment variables are passed through an
-  allow-list too, so tokens and keys in your shell never reach an agent.
+  allow-list too (only `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_*` and `CLAUDE_CODE_GIT_BASH_PATH` pass from the
+  `CLAUDE_` family), so tokens and keys in your shell, or left over from another Claude session, never reach an agent.

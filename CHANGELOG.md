@@ -37,8 +37,29 @@ All notable changes to Jobs Express are listed here. The format follows
 
 ### Security
 - The local server answers only `127.0.0.1`, `localhost` or `[::1]` on its own port (DNS rebinding), requires a matching
-  Origin on every state-changing request, and requires a random per-launch token (header or `HttpOnly; SameSite=Strict`
-  cookie, set when the page is served) on every API call and the live stream. No CORS headers, ever.
+  Origin on every state-changing request, and requires a session cookie (`HttpOnly; SameSite=Strict`) on every API call
+  and the live stream. No CORS headers, ever.
+- **The page carries no secret.** The cookie is only handed out by a one-time launch link (`/?launch=<code>`) that the
+  launcher opens, so another program or user on the computer that simply requests the page gets nothing usable. Each
+  code works once and is replaced. A second start of the app reads the next code from `.launch` in the data folder
+  (private to your user). `/api/health` no longer reveals the data folder to anyone without the session.
+- The run lock is created atomically (written complete, then linked into place), takes over an abandoned lock through
+  a guard so exactly one process wins, and treats an empty lock as held for two seconds. A 16-process race test is in
+  the suite.
+- The live log and event stream no longer carry raw stream lines, and what an agent typed into a form is logged as a
+  character count, never the text. Raw transcripts stay in the run folder only.
+- The agent environment passes only `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_*` and
+  `CLAUDE_CODE_GIT_BASH_PATH` from the `CLAUDE_` family, so session tokens and hook secrets from a parent Claude never
+  reach an agent.
+- The default data folder is outside the app folder (`%LOCALAPPDATA%\JobsExpress`, `~/.jobs-express`), so agents working
+  in the app folder cannot read it. A 1.0 `./data` folder is moved there on first start. A folder that already existed is
+  no longer re-permissioned, and the app warns if other accounts can read it.
+- A `%` can no longer be expanded by `cmd.exe` through the Claude shim (paths with one are refused with a plain message,
+  and the app's own path is no longer on the command line), the shim is started without `shell: true` (no Node
+  deprecation notice in the log), and `Start.bat` ignores a `node.bat` or `node.exe` sitting next to it.
+- Unicode line separators (NEL, U+2028/2029, C0 separators) are collapsed in everything fenced into a prompt. Run pruning
+  never walks through a linked `runs` folder. Demo temp folders are cleaned on exit and on the next start, and a plain page
+  request can no longer create one.
 - Agents run with `--setting-sources project --permission-mode dontAsk`, so your own Claude settings cannot widen what a
   job posting can make them do. The `Read` tool is gone, `WebFetch` is limited to the public job-feed domains, Chrome
   tools are named one by one (no `javascript_tool`, `upload_image`, `gif_creator`, network or console readers, or batch
@@ -51,6 +72,13 @@ All notable changes to Jobs Express are listed here. The format follows
   corrupt `profile.json` is set aside and reported, never overwritten silently.
 
 ### Changed
+- Settings, Requirements warns when Git for Windows (Git Bash) is missing on Windows, because Claude Code uses it for the
+  one shell command the agents need.
+- A scheduled run that steps aside for a manual run no longer replaces the last real result on the dashboard.
+- The Applications page has a sort menu. A CAPTCHA or an account or password wall is shown like an emailed code (open the
+  posting, no answer box, nothing remembered). The install and sign-in output uses the full row, stays after success and
+  can be dismissed. The LinkedIn confirmation checkbox sticks, the Live acceptance box visibly resets with the mode, the
+  resume picker shows a focus ring, and dialogs close on a backdrop click.
 - Practice rows no longer count as duplicates in a Live run (they are the ones to submit), and posting keys keep the
   query parameters that identify the job. Company names in any alphabet are compared properly.
 - Reads that fail (a file locked by antivirus, say) retry briefly and then report an error instead of looking like

@@ -37,7 +37,7 @@ build step. A dev-only tool may use Playwright if it is present (see `tools/reco
 - A guide for another application system (Workable, SmartRecruiters, Breezy) in `agents/`.
 - More ways the preflight can explain a failure.
 - Translations of the interface.
-- Notes on what broke for you, with the redacted `data/runs/<id>/run.log`.
+- Notes on what broke for you, with the redacted `runs/<id>/run.log` from your data folder.
 
 ## Pull requests
 

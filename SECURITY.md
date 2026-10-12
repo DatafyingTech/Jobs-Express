@@ -24,7 +24,7 @@ We will credit you in the release notes unless you would rather we did not. This
 
 **In scope:**
 
-- Anything that lets a web page or another local user reach the app's API or read `data/` (DNS rebinding, CSRF,
+- Anything that lets a web page or another local user reach the app's API or read the data folder (DNS rebinding, CSRF,
   path traversal, a bypass of the Host, Origin, `X-CJA` or per-launch token checks).
 - Anything that lets text from a profile, a job posting or a web page become a command (including the scheduled task,
   the install and sign-in buttons, and the log helper).
@@ -37,8 +37,8 @@ We will credit you in the release notes unless you would rather we did not. This
 
 **Out of scope:**
 
-- An attacker who already has code execution on your computer as your user. They can read `data/` directly.
-- The fact that `data/` is plain text on disk. It is documented, and you can delete it any time.
+- An attacker who already has code execution on your computer as your user. They can read the data folder directly.
+- The fact that your data folder is plain text on disk. It is documented, and you can delete it any time.
 - Behaviour of Claude Code, the Claude in Chrome extension, Chrome, or the job sites. Report those upstream.
 - Your account being limited by a site because you used automation. See "Responsible use and limits" in the README.
 - Findings from automated scanners with no working path through this code.
@@ -47,13 +47,16 @@ We will credit you in the release notes unless you would rather we did not. This
 
 - The server listens on `127.0.0.1` only and answers only a `Host` of `127.0.0.1`, `localhost` or `[::1]` on its own port,
   which defeats DNS rebinding. Every request that changes something must come from the app's own origin and carry a
-  custom `X-CJA` header. Every API call (and the live event stream) must carry a random per-launch token that is
-  only embedded in the page the server itself serves, in a header or an `HttpOnly; SameSite=Strict` cookie. There is
-  no CORS: no `Access-Control-*` header is ever sent. Together these stop a website you visit from starting agents or
-  reading your data through localhost.
+  custom `X-CJA` header. Every API call (and the live event stream) must carry the session secret in an
+  `HttpOnly; SameSite=Strict` cookie. The page contains no secret: the cookie is only set by a one-time launch link
+  (`/?launch=<code>`) that the launcher opens, each code works once and is replaced, and a second launch of the app
+  reads its next code from `.launch` in the data folder, which only your user account can read. A bare request for
+  the page, from a website or from another program or user on this computer, gets a page that cannot do anything.
+  `/api/health` says only that the app is there. There is no CORS: no `Access-Control-*` header is ever sent.
 - The data folder is created private to your user account, and the profile, answers and run logs are never sent anywhere
   by the app itself.
-- It serves only the files in `public/`, and writes only inside `data/`.
+- It serves only the files in `public/`, and writes only inside the data folder, which by default is outside the app
+  folder (`%LOCALAPPDATA%\JobsExpress`, or `~/.jobs-express`).
 - Agents are started with `claude -p --chrome --setting-sources project --permission-mode dontAsk` and an allow-list: a
   named list of Chrome tools (no `javascript_tool`, screenshot upload or batch tool), `WebFetch` for a few public
   job-feed domains, `WebSearch`, and `Bash(node tools/log.mjs:*)`. There is no `Read`, `Edit` or `Write`. Your own Claude
