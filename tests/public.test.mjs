@@ -51,13 +51,14 @@ test('emailed-code holds are shown as "enter it yourself", not as a question to 
   assert.match(src, /agents never read your email/i);
 });
 
-test('the page sends the per-launch token on every request and no inline script is needed', () => {
+test('the page carries no secret and needs no inline script', () => {
   const api = fs.readFileSync(path.join(ROOT, 'public', 'js', 'api.js'), 'utf8');
-  assert.match(api, /x-cja-token/);
-  assert.match(api, /meta\[name="cja-token"\]/);
+  assert.doesNotMatch(api, /x-cja-token|cja-token/);
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
-  assert.match(html, /<meta name="cja-token" content="__CJA_TOKEN__">/);
+  assert.doesNotMatch(html, /cja-token|__CJA_TOKEN__/);
   assert.doesNotMatch(html, /<script(?![^>]*src=)/);
+  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  assert.match(app, /This window was not opened by Jobs Express/);
 });
 
 test('the launchers check for the whole download and pass real exit codes', () => {

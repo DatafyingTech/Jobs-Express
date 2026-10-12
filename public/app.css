@@ -634,6 +634,10 @@ pre.cmd { margin: 0; padding: var(--s3); border-radius: var(--r); background: va
 .tag-code { display: inline-flex; align-items: center; gap: var(--s2); color: var(--warn); font-weight: 650; }
 
 /* ---------- review round ---------- */
+#resume-file:focus-visible + .dropzone { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check-row .term-row { grid-column: 2 / -1; }
+.check-row .term-row .term { max-width: none; margin-top: 0; }
+.sort-select { width: auto; min-height: var(--h-sm); padding-top: 0; padding-bottom: 0; }
 .hint.err { color: var(--bad); }
 .input[aria-invalid="true"] { border-color: var(--bad); }
 .dropzone:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }

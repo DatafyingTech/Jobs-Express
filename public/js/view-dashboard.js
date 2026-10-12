@@ -34,6 +34,7 @@ export function dashboardView() {
       ),
     );
     dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'yes'); dlg.remove(); });
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close('no'); });
     document.body.append(dlg);
     dlg.showModal();
   });
@@ -138,10 +139,10 @@ export function dashboardView() {
     collapseBtn.setAttribute('aria-expanded', 'true');
     collapseBtn.setAttribute('aria-label', 'Collapse activity');
 
-    const line = (e) => (!raw && e.kind === 'tool') ? null : h('div', { class: `log-line ${raw && e.raw ? 'raw' : e.kind}` },
+    const line = (e) => (!raw && e.kind === 'tool') ? null : h('div', { class: `log-line ${e.kind}` },
       h('span', { class: 't' }, clock(e.ts)),
       h('span', { class: 'a' }, e.agent ? `A${e.agent}` : ''),
-      h('span', { class: 'm' }, raw && e.raw ? e.raw : e.text));
+      h('span', { class: 'm' }, e.text));
 
     const empty = () => h('div', { class: 'log-empty' }, h('b', { style: { color: 'var(--text-2)' } }, 'Nothing is running'), h('span', {}, 'What the agents are doing shows up here as soon as you start.'));
 

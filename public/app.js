@@ -152,6 +152,11 @@ async function boot() {
   try {
     await loadInfo();
   } catch (e) {
+    if (e.code === 'token') {
+      mount(mainHost, h('div', { class: 'panel panel-pad' }, h('h2', {}, 'This window was not opened by Jobs Express'),
+        h('p', { class: 'muted', style: { marginTop: '8px', maxWidth: '60ch' } }, 'For your safety the app only works in the window its launcher opens. Close this tab, then double-click Start.bat, start.command or start.sh again (or run node server.mjs). It opens the right window for you.')));
+      return;
+    }
     mount(mainHost, h('div', { class: 'panel panel-pad' }, h('h2', {}, 'The app is not responding'), h('p', { class: 'muted', style: { marginTop: '8px' } }, e.message)));
     return;
   }

@@ -33,6 +33,7 @@ const b = await pw.chromium.launch({ headless: true, ...(browser ? { executableP
 let failures = 0;
 for (const width of WIDTHS) {
   const ctx = await b.newContext({ viewport: { width, height: 844 }, hasTouch: width < 800, isMobile: width < 500 });
+  await ctx.addCookies([{ name: 'cja_token', value: app.token, url: `http://127.0.0.1:${port}` }]);
   const page = await ctx.newPage();
   for (const route of ROUTES) {
     await page.goto(`http://127.0.0.1:${port}/?demo=1${route}`);

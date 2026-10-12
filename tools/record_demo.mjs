@@ -87,8 +87,11 @@ async function main() {
         const ctx = await b.newContext(o.phone
           ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'light' }
           : { viewport: { width: W, height: H }, deviceScaleFactor: 2, colorScheme: o.dark ? 'dark' : 'light' });
+        const target = o.missingClaude ? { url: base2, app: app2 } : { url: base, app };
+        // The app only answers a window it opened itself: hand this browser the session cookie.
+        await ctx.addCookies([{ name: 'cja_token', value: target.app.token, url: target.url }]);
         const page = await ctx.newPage();
-        await page.goto((o.missingClaude ? base2 : base) + route);
+        await page.goto(target.url + route);
         await page.waitForSelector(o.wait, { timeout: 15000 });
         if (o.min) await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length >= n, [o.wait, o.min], { timeout: 15000 });
         await page.waitForTimeout(o.settle ?? 600);
@@ -110,7 +113,8 @@ async function main() {
         const res = spawnSync(browser.path, [
           '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', `--user-data-dir=${profileDir}`,
           `--window-size=${W},${H}`, '--force-device-scale-factor=2', '--virtual-time-budget=9000',
-          `--screenshot=${file}`, base + route,
+          // No cookie jar to fill here, so open the app's one-time link: it sets the cookie and redirects (the #fragment is kept).
+          `--screenshot=${file}`, `${base}/?launch=${app.issueLaunchCode()}&demo=1${route.replace('/?demo=1', '').replace('/?demo=1&', '&')}`,
         ], { encoding: 'utf8', timeout: 60000 });
         // Edge can still hold the profile for a moment after it exits (EPERM, ENOTEMPTY on Windows). Cleaning up is never worth a failure.
         try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* leave it for the OS temp cleaner */ }

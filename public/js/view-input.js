@@ -34,15 +34,26 @@ export function inputView() {
   }
 
   // Sites that email a code are held for you: agents cannot read your email, so you enter the code yourself.
-  const isCode = (q) => /verification code|emailed code|security code|one-time (pass)?code|confirmation code/i.test(q.question);
+  // These are not questions you can answer once and have remembered: something on the site needs you, in person.
+  const BLOCKS = {
+    code: { re: /verification code|emailed code|security code|one-time (pass)?code|confirmation code/i, title: 'Needs a code from your email',
+      body: 'This site emailed a verification code. Agents never read your email, so they stopped here. Open the posting, then enter the code from your inbox yourself and finish the application.' },
+    captcha: { re: /captcha|verify you are human|bot check|not a robot/i, title: 'Blocked by a CAPTCHA',
+      body: 'This site asked to prove you are a person. Agents never click those, so they stopped here. Open the posting and finish the application yourself if you still want it.' },
+    login: { re: /(needs|requires?|wants?|blocked by|behind|asks? for).{0,40}(an? account|password|sign.?in|log.?in)/i, title: 'Needs an account or a password',
+      body: 'This site wants you to create an account or enter a password. Agents never do either, so they stopped here. Open the posting and decide whether you want to continue yourself.' },
+  };
+  const blockOf = (q) => Object.values(BLOCKS).find((b) => b.re.test(q.question));
+  const isCode = (q) => !!blockOf(q);
 
   function codeItem(q) {
+    const b = blockOf(q);
     return h('div', { class: 'q-item' },
-      h('div', { class: 'q' }, h('span', { class: 'tag-code' }, icon('lock', 14), 'Needs a code from your email')),
+      h('div', { class: 'q' }, h('span', { class: 'tag-code' }, icon('lock', 14), b.title)),
       h('div', { class: 'meta' },
         h('span', {}, h('b', {}, q.company)), q.role ? [h('span', { class: 'dot' }, '·'), h('span', {}, q.role)] : null,
         h('span', { class: 'dot' }, '·'), h('span', { class: 'faint' }, relTime(q.ts))),
-      h('p', { class: 'muted', style: { maxWidth: '66ch' } }, 'This site emailed a verification code. Agents never read your email, so they stopped here. Open the posting, then enter the code from your inbox yourself and finish the application.'),
+      h('p', { class: 'muted', style: { maxWidth: '66ch' } }, b.body),
       h('div', { class: 'q-actions' },
         q.url ? button({ label: 'Open the posting', icon: 'external', kind: 'primary', size: 'sm', href: q.url, target: '_blank' }) : null,
         button({ label: 'I finished it, clear this', size: 'sm', onClick: () => dismiss(q) }),

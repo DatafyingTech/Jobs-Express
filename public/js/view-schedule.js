@@ -63,14 +63,16 @@ export function schedulePanels() {
     const fresh = num('freshHours', 'Only roles posted in the last N hours. No quota: it applies to every honest fit and never pads the run.', L.freshHours);
     const cap = num('maxMinutes', 'The run is stopped at this point and what finished is kept.', L.maxMinutes);
 
+    const liveInput = h('input', { type: 'checkbox', checked: f.liveAccepted, onChange: (e) => { f.liveAccepted = e.target.checked; } });
     const liveBox = h('label', { class: 'check live-accept' },
-      h('input', { type: 'checkbox', checked: f.liveAccepted, onChange: (e) => { f.liveAccepted = e.target.checked; } }),
+      liveInput,
       h('span', {}, h('b', {}, p.liveText), h('span', { class: 'hint', style: { display: 'block', marginTop: '4px' } }, 'Real applications go to real employers while you are away, with nobody reading them first. You cannot take a submitted application back.')));
     const liveWrap = h('div', { class: 'span-2', hidden: f.mode !== 'live' }, liveBox);
     const modeDesc = h('p', { class: 'hint' }, f.mode === 'live' ? 'Live submits each application it is sure about.' : 'Practice fills in the forms and stops before Submit. Check the digest, then decide.');
     const modeSeg = segmented([{ value: 'practice', label: 'Practice' }, { value: 'live', label: 'Live' }], f.mode, (v) => {
       f.mode = v;
-      if (v !== 'live') f.liveAccepted = false;
+      // Going back to Practice forgets the acceptance, on screen as well as in the form.
+      if (v !== 'live') { f.liveAccepted = false; liveInput.checked = false; }
       liveWrap.hidden = v !== 'live';
       modeDesc.textContent = v === 'live' ? 'Live submits each application it is sure about.' : 'Practice fills in the forms and stops before Submit. Check the digest, then decide.';
     }, { label: 'Mode' });
@@ -191,7 +193,8 @@ export function schedulePanels() {
     rows.push(['Next run', p.summary.nextRunText || (p.schedule.enabled ? '' : 'Not scheduled')]);
     if (sys?.installed && sys.nextRun && p.os.kind === 'task-scheduler') rows.push(['Windows says', new Date(sys.nextRun).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })]);
     const last = p.summary.lastRun;
-    rows.push(['Last run', last ? `${p.summary.lastRunText.replace(/^Last run:? ?/, '') || STATUS_TEXT[last.status]} (${relTime(last.finishedAt || last.startedAt)})` : 'No runs yet']);
+    const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+    rows.push(['Last run', last ? `${cap(p.summary.lastRunText.replace(/^Last run:? ?/, '')) || STATUS_TEXT[last.status]} (${relTime(last.finishedAt || last.startedAt)})` : 'No runs yet']);
     const warn = [];
     if (sys && p.schedule.enabled && !sys.installed) warn.push('The schedule is saved but the job is missing from the operating system. Press Save schedule to put it back.');
     if (sys?.stale) warn.push('The scheduled job points at a different copy of Node.js or of this folder. Press Save schedule to update it.');

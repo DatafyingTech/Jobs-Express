@@ -11,13 +11,26 @@ const sourceName = (s) => SOURCES[String(s || '').toLowerCase()] || (s ? s.charA
 export function applicationsView() {
   let filter = 'all';
   let query = '';
+  let sortBy = 'newest';
   const host = h('section', { class: 'panel', 'aria-label': 'Applications' });
   const tabsHost = h('div', { class: 'seg-wrap' });
   const tableHost = h('div', { class: 'table-wrap' });
   const search = h('input', { class: 'input', type: 'search', placeholder: 'Search company or role', 'aria-label': 'Search applications', onInput: (e) => { query = e.target.value.toLowerCase(); drawTable(); } });
 
+  const payNumber = (p) => { const m = /(\d[\d,]*(?:\.\d+)?)/.exec(String(p || '')); return m ? Number(m[1].replace(/,/g, '')) : -1; };
+  const STATUS_ORDER = { held: 0, ready: 1, submitted: 2, skipped: 3 };
+  const SORTS = {
+    newest: ['Newest first', (a, b) => String(b.ts).localeCompare(String(a.ts))],
+    oldest: ['Oldest first', (a, b) => String(a.ts).localeCompare(String(b.ts))],
+    company: ['Company A to Z', (a, b) => a.company.localeCompare(b.company, undefined, { sensitivity: 'base' })],
+    pay: ['Pay, high to low', (a, b) => payNumber(b.pay) - payNumber(a.pay)],
+    status: ['Status', (a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || String(b.ts).localeCompare(String(a.ts))],
+  };
+
   function filtered() {
-    return S.apps.filter((a) => (filter === 'all' || a.status === filter) && (!query || `${a.company} ${a.role} ${a.source} ${a.note}`.toLowerCase().includes(query)));
+    return S.apps
+      .filter((a) => (filter === 'all' || a.status === filter) && (!query || `${a.company} ${a.role} ${a.source} ${a.note}`.toLowerCase().includes(query)))
+      .sort(SORTS[sortBy][1]);
   }
 
   function drawTabs() {
@@ -56,7 +69,9 @@ export function applicationsView() {
   }
 
   const exportBtn = button({ label: 'Export CSV', icon: 'download', size: 'sm', href: csvUrl });
-  const toolbar = h('div', { class: 'toolbar' }, tabsHost, h('div', { class: 'page-actions' }, h('div', { class: 'search' }, search), exportBtn));
+  const sortSelect = h('select', { class: 'select sort-select', 'aria-label': 'Sort applications by', onChange: (e) => { sortBy = e.target.value; drawTable(); } },
+    ...Object.entries(SORTS).map(([k, [label]]) => h('option', { value: k }, label)));
+  const toolbar = h('div', { class: 'toolbar' }, tabsHost, h('div', { class: 'page-actions' }, h('div', { class: 'search' }, search), sortSelect, exportBtn));
   mount(host, toolbar, tableHost);
   drawTabs();
   drawTable();

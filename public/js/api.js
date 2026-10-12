@@ -1,10 +1,9 @@
 // Talking to the local server. All state lives on this computer.
 export const DEMO_QUERY = new URLSearchParams(location.search).get('demo') === '1';
 
-// The server puts a random per-launch token in the page it serves. Only this page can read it, and every request carries it.
-const TOKEN = document.querySelector('meta[name="cja-token"]')?.content || '';
-
-const baseHeaders = () => ({ 'x-cja': '1', 'x-cja-token': TOKEN, ...(DEMO_QUERY ? { 'x-cja-demo': '1' } : {}) });
+// There is no secret in this page. The browser got an HttpOnly session cookie when the launcher opened the app's one-time
+// link, and sends it with every request by itself.
+const baseHeaders = () => ({ 'x-cja': '1', ...(DEMO_QUERY ? { 'x-cja-demo': '1' } : {}) });
 
 export async function api(method, path, body) {
   const init = { method, headers: baseHeaders() };
@@ -24,7 +23,7 @@ export async function api(method, path, body) {
   } catch {
     /* non-JSON error */
   }
-  if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { code: data?.code, status: res.status });
   return data;
 }
 

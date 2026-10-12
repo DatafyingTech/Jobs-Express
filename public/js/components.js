@@ -351,17 +351,18 @@ export function preflightPanel({ flat = false } = {}) {
     const showFix = r.status !== 'ok' && r.hint;
     const job = S.setupJob;
     const mine = (r.id === 'claude' && job.kind === 'install') || (r.id === 'auth' && job.kind === 'login');
-    const showTerm = mine && job.lines.length && job.status !== 'done';
+    // The output stays on screen after a job ends (until you dismiss it), so a quick success can still be read.
+    const showTerm = mine && job.lines.length && !job.dismissed;
     return h('div', { class: 'check-row' },
       h('div', { class: `ic ${r.status}` }, icon(ROW_ICON[r.status] || 'circle', 14)),
       h('div', {},
         h('div', { class: 'title' }, r.title),
         h('div', { class: 'sum' }, r.summary),
         showFix ? h('div', { class: 'fix' }, r.hint) : null,
-        showTerm ? jobTerminal(job) : null,
       ),
       h('div', { class: 'actions' }, ...actions),
       extra,
+      showTerm ? h('div', { class: 'term-row' }, jobTerminal(job)) : null,
     );
   };
 
@@ -388,7 +389,8 @@ function jobTerminal(job) {
     h('div', { class: 'term-head' },
       running ? h('span', { class: 'spinner', 'aria-hidden': 'true' }) : icon(job.status === 'failed' ? 'alert' : 'check', 14),
       h('b', {}, title), h('span', { class: 'faint' }, state),
-      running ? button({ label: 'Cancel', size: 'sm', kind: 'ghost', onClick: () => guard(() => POST('/api/setup/cancel')) }) : null),
+      running ? button({ label: 'Cancel', size: 'sm', kind: 'ghost', onClick: () => guard(() => POST('/api/setup/cancel')) })
+        : button({ label: 'Dismiss', size: 'sm', kind: 'ghost', onClick: () => { S.setupJob.dismissed = true; emit('setup'); } })),
     h('div', { class: 'term-body', role: 'log', 'aria-live': 'polite', tabindex: '0' }, ...job.lines.slice(-120).map((l) => h('div', {}, l))),
     running && job.kind === 'install' ? h('div', { class: 'hint' }, 'The installer shows no progress while it downloads. This can take a minute or two.') : null,
     running && job.kind === 'login' ? h('div', { class: 'hint' }, 'A browser window should open. Sign in there with your Claude account. If nothing opens, copy a link from the lines above into your browser.') : null);
