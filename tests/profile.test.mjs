@@ -85,9 +85,13 @@ test('profileGaps lists what is missing', () => {
   assert.deepEqual(profileGaps(p), []);
 });
 
-test('createStore defaults to ./data or CJA_DATA_DIR', async () => {
-  const { resolveDataDir } = await import('../lib/store.mjs');
+test('the data folder is CJA_DATA_DIR, or a folder in your user area outside the app folder', async () => {
+  const { resolveDataDir, defaultDataDir, ROOT } = await import('../lib/store.mjs');
   assert.equal(resolveDataDir({ CJA_DATA_DIR: os.tmpdir() }), path.resolve(os.tmpdir()));
-  assert.match(resolveDataDir({}), /data$/);
+  assert.equal(defaultDataDir({ LOCALAPPDATA: 'C:\\Users\\pat\\AppData\\Local' }, { home: 'C:\\Users\\pat', platform: 'win32' }), path.join('C:\\Users\\pat\\AppData\\Local', 'JobsExpress'));
+  assert.equal(defaultDataDir({}, { home: '/home/pat', platform: 'linux' }), path.join('/home/pat', '.jobs-express'));
+  assert.equal(defaultDataDir({}, { home: '/Users/pat', platform: 'darwin' }), path.join('/Users/pat', '.jobs-express'));
+  const dflt = resolveDataDir({});
+  assert.ok(!dflt.startsWith(ROOT + path.sep) && dflt !== ROOT, 'not inside the app folder');
   assert.ok(createStore(os.tmpdir()).dataDir);
 });

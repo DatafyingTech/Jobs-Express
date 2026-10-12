@@ -46,22 +46,11 @@ test('Host header: only 127.0.0.1, localhost or [::1] on the server\'s own port 
 
 // --- per-launch token ----------------------------------------------------------------------------
 
-test('the token is random per launch and arrives with the page, in a cookie and in the HTML', async () => {
+test('the session token is random per launch', async () => {
   const a = await boot();
   const b = await boot();
   assert.match(a.app.token, /^[0-9a-f]{64}$/);
   assert.notEqual(a.app.token, b.app.token);
-  const page = await a.raw('GET', '/');
-  assert.equal(page.status, 200);
-  assert.ok(page.text.includes(`content="${a.app.token}"`), 'token is embedded in the page');
-  assert.ok(!page.text.includes('__CJA_TOKEN__'), 'placeholder was replaced');
-  const cookie = [].concat(page.headers['set-cookie'] || []).join(';');
-  assert.match(cookie, new RegExp(`cja_token=${a.app.token}`));
-  assert.match(cookie, /HttpOnly/);
-  assert.match(cookie, /SameSite=Strict/);
-  const css = await a.raw('GET', '/app.css');
-  assert.equal(css.status, 200);
-  assert.equal(css.headers['set-cookie'], undefined, 'only the page sets the cookie');
   await a.close();
   await b.close();
 });

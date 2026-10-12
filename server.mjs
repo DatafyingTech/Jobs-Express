@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  ROOT, FILES, createStore, resolveDataDir, listApplications, listHeld, listRetryable, resolveHeld, toCsv, STATUSES,
+  ROOT, FILES, createStore, resolveDataDir, prepareDataDir, defaultDataDir, listApplications, listHeld, listRetryable, resolveHeld, toCsv, STATUSES,
 } from './lib/store.mjs';
 import { loadProfile, saveProfile, saveResume, addQa, removeQa, profileGaps, profileWarnings, MAX_RESUME_BYTES, CATEGORY_OPTIONS, SENIORITY_OPTIONS, WORK_MODES, WORK_AUTH_OPTIONS } from './lib/profile.mjs';
 import {
@@ -167,7 +167,7 @@ function createContext({ store, demo, runner, preflight, getPort, schedulerCtx, 
   const osSpec = (v) => ({
     time: v.time, days: v.days,
     nodePath: process.execPath, scriptPath: path.join(ROOT, 'server.mjs'), workDir: ROOT,
-    dataDir: path.resolve(store.dataDir) === path.resolve(ROOT, 'data') ? '' : store.dataDir,
+    dataDir: path.resolve(store.dataDir) === path.resolve(defaultDataDir()) ? '' : store.dataDir,
     limitMinutes: v.maxMinutes + 30,
     display: process.env.DISPLAY,
   });
@@ -212,7 +212,8 @@ function createContext({ store, demo, runner, preflight, getPort, schedulerCtx, 
   let testingConnection = null;
 
   const routes = {
-    'GET /api/health': async () => ({ ok: true, app: APP_NAME, version: VERSION, demo, port: getPort(), dataDir: demo ? '' : store.dataDir }),
+    // Open to anyone on this computer (the launcher uses it to find a running copy), so it says nothing private.
+    'GET /api/health': async (req) => ({ ok: true, app: APP_NAME, version: VERSION, demo, port: getPort(), ...(req.cjaAuthed && !demo ? { dataDir: store.dataDir } : {}) }),
 
     'GET /api/state': async () => {
       const profile = loadProfile(store);
@@ -277,7 +278,7 @@ function createContext({ store, demo, runner, preflight, getPort, schedulerCtx, 
     'POST /api/preflight/linkedin': async (req) => {
       const { confirmed } = await readJson(req);
       saveState(store, { linkedinConfirmed: confirmed === true, linkedinConfirmedAt: confirmed === true ? new Date().toISOString() : null });
-      return getPreflight();
+      return getPreflight({ fresh: true });
     },
     'POST /api/open': async (req) => {
       const { target } = await readJson(req);
@@ -465,12 +466,22 @@ function createContext({ store, demo, runner, preflight, getPort, schedulerCtx, 
  * @param {boolean} [o.demo]   serve fictional sample data only
  * @param {object} [o.runner]  inject a runner (tests)
  */
-export function createApp({ store = createStore(), demo = false, runner = null, preflight = null, token = null, schedulerCtx = null, setupJobs = null, scheduleDeps = null } = {}) {
+export function createApp({ store = createStore(), demo = false, runner = null, preflight = null, token = null, schedulerCtx = null, setupJobs = null, scheduleDeps = null, onLaunch = null } = {}) {
   let boundPort = 0;
   const getPort = () => boundPort;
   // A fresh random secret per launch. The page that this server hands out carries it; a web page on any other
   // origin has no way to read it, so it cannot start agents or read your data through localhost.
   const secret = token || crypto.randomBytes(32).toString('hex');
+  // The page itself carries no secret. A browser gets the session cookie only by opening /?launch=<code> with a code the
+  // app handed to its own launcher: each code works once, then is replaced. A bare GET / from another program on this
+  // computer gets a page that cannot do anything.
+  const launchCodes = new Set();
+  const issueLaunchCode = () => {
+    const code = crypto.randomBytes(24).toString('hex');
+    launchCodes.add(code);
+    while (launchCodes.size > 5) launchCodes.delete(launchCodes.values().next().value);
+    return code;
+  };
   const main = createContext({ store, demo, runner, preflight, getPort, schedulerCtx, setupJobs, scheduleDeps });
   let demoCtx = demo ? main : null;
   let demoDir = null;
@@ -526,7 +537,7 @@ export function createApp({ store = createStore(), demo = false, runner = null, 
       if (path.extname(rel)) throw new HttpError(404, 'Not found');
       file = path.join(PUBLIC_DIR, 'index.html');
     }
-    let data = fs.readFileSync(file);
+    const data = fs.readFileSync(file);
     const headers = {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-store',
@@ -536,10 +547,6 @@ export function createApp({ store = createStore(), demo = false, runner = null, 
       'Referrer-Policy': 'no-referrer',
       'Cross-Origin-Resource-Policy': 'same-origin',
     };
-    if (path.basename(file) === 'index.html') {
-      data = Buffer.from(data.toString('utf8').replace('__CJA_TOKEN__', secret), 'utf8');
-      headers['Set-Cookie'] = `cja_token=${secret}; Path=/; HttpOnly; SameSite=Strict`;
-    }
     headers['Content-Length'] = data.length;
     res.writeHead(200, headers);
     res.end(data);
@@ -555,15 +562,30 @@ export function createApp({ store = createStore(), demo = false, runner = null, 
         throw new HttpError(400, 'That address is not valid.');
       }
       const method = req.method || 'GET';
-      const ctx = contextFor(req, url);
-      const { routes, handleSse, store: cstore } = ctx;
 
-      if (url.pathname.startsWith('/api/') && url.pathname !== '/api/health') {
+      // The launcher's one-time link: set the session cookie, burn the code, and go to the plain page.
+      if (method === 'GET' && url.pathname === '/' && url.searchParams.has('launch')) {
+        const code = url.searchParams.get('launch');
+        const headers = { Location: url.searchParams.get('demo') === '1' ? '/?demo=1' : '/', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
+        if (launchCodes.delete(code)) {
+          headers['Set-Cookie'] = `cja_token=${secret}; Path=/; HttpOnly; SameSite=Strict`;
+          try { onLaunch?.(); } catch { /* rotating the code is best effort */ }
+        }
+        res.writeHead(302, headers);
+        return res.end();
+      }
+
+      const isApi = url.pathname.startsWith('/api/');
+      const authed = tokenOk(req);
+      if (isApi && url.pathname !== '/api/health') {
         if (method !== 'GET' && method !== 'HEAD' && !originAllowed(req)) throw new HttpError(403, 'This request came from another website, so it was refused.');
-        if (!tokenOk(req)) {
-          throw Object.assign(new HttpError(403, 'This page is out of date or did not come from the app. Reload the page and try again.'), { code: 'token' });
+        if (!authed) {
+          throw Object.assign(new HttpError(403, 'This page was not opened by Jobs Express. Close it and use the window the launcher opened, or start the app again.'), { code: 'token' });
         }
       }
+      req.cjaAuthed = authed;
+      const ctx = isApi ? contextFor(req, url) : main;
+      const { routes, handleSse, store: cstore } = ctx;
 
       if (method === 'GET' && url.pathname === '/api/events') return handleSse(req, res);
 
@@ -614,6 +636,10 @@ export function createApp({ store = createStore(), demo = false, runner = null, 
     });
   }
 
+  function cleanupDemo() {
+    if (demoDir) { try { fs.rmSync(demoDir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } }
+  }
+
   function close() {
     main.closeClients();
     main.shutdown();
@@ -625,7 +651,7 @@ export function createApp({ store = createStore(), demo = false, runner = null, 
     });
   }
 
-  return { server, runner: main.runner, store, listen, close, token: secret };
+  return { server, runner: main.runner, store, listen, close, cleanupDemo, token: secret, issueLaunchCode };
 }
 
 // --- the unattended daily run ----------------------------------------------------------------
@@ -634,7 +660,7 @@ export function createApp({ store = createStore(), demo = false, runner = null, 
 //   node server.mjs --scheduled-run --test        a small Practice-only run, the same one the Settings button starts
 
 async function scheduledMain(args) {
-  const store = createStore(resolveDataDir());
+  const store = createStore(prepareDataDir().dir);
   store.ensure();
   const dry = args.includes('--dry-run');
   const test = args.includes('--test');
@@ -677,15 +703,33 @@ async function listenOnFreePort(app, first) {
   return app.listen(0);
 }
 
+const LAUNCH_FILE = '.launch';
+
+/** The running copy leaves a one-time launch code here (readable only by you), so a second launch can open it. */
+function readLaunchFile(dataDir) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(dataDir, LAUNCH_FILE), 'utf8'));
+    if (Number.isInteger(j.port) && typeof j.code === 'string' && Number.isInteger(j.pid)) return j;
+  } catch { /* not running, or not ours */ }
+  return null;
+}
+
+const healthOf = async (port) => {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(600) });
+    const j = await res.json();
+    return j.app === APP_NAME && !j.demo ? j : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Is a copy already running on this data folder? { port, code } if so, { other: true } if some other copy is up. */
 async function findRunningInstance(first, dataDir) {
+  const mine = readLaunchFile(dataDir);
+  if (mine && (await healthOf(mine.port))) return { port: mine.port, code: mine.code };
   for (let port = first; port < first + 20; port++) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(600) });
-      const j = await res.json();
-      if (j.app === APP_NAME && !j.demo) return { port, dataDir: j.dataDir || '', same: !j.dataDir || path.resolve(j.dataDir) === path.resolve(dataDir) };
-    } catch {
-      /* nothing there */
-    }
+    if (await healthOf(port)) return { port, other: true };
   }
   return null;
 }
@@ -703,6 +747,17 @@ function openDefaultBrowser(url) {
 
 // Compare real paths, so starting the app through a shortcut, symlink or junction still works.
 const realPath = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+/** Sample-data folders from earlier runs that were killed before they could clean up. */
+function sweepOldDemoDirs() {
+  try {
+    for (const name of fs.readdirSync(os.tmpdir())) {
+      if (!/^cja-demo-/.test(name)) continue;
+      const p = path.join(os.tmpdir(), name);
+      if (Date.now() - fs.statSync(p).mtimeMs > 60 * 60 * 1000) fs.rmSync(p, { recursive: true, force: true, maxRetries: 3 });
+    }
+  } catch { /* temp folders are not worth a failure */ }
+}
+
 const isMain = process.argv[1] && realPath(process.argv[1]) === realPath(fileURLToPath(import.meta.url));
 if (isMain) {
   const args = process.argv.slice(2);
@@ -728,14 +783,23 @@ if (isMain) {
     process.exit(await scheduledMain(args));
   }
 
+  sweepOldDemoDirs();
+
+  const dataInfo = demo ? null : prepareDataDir();
+  if (dataInfo?.note) console.log(`  ${dataInfo.note}`);
+
   if (!demo) {
-    const existing = await findRunningInstance(wantedPort, resolveDataDir());
+    const existing = await findRunningInstance(wantedPort, dataInfo.dir);
+    if (existing?.other) {
+      console.log('Jobs Express is already running, with a different data folder. Close that copy first, or start this one on another port with --port 4400.');
+      process.exit(0);
+    }
     if (existing) {
-      const url = `http://127.0.0.1:${existing.port}/`;
-      console.log(`Jobs Express is already running (data folder: ${existing.dataDir || 'unknown'}).${existing.same ? '' : ' That is a different data folder from the one you asked for.'}`);
-      if (noOpen) console.log(`Not opening a window. It is at ${url}`);
+      const url = `http://127.0.0.1:${existing.port}/?launch=${existing.code}`;
+      console.log(`Jobs Express is already running (data folder: ${dataInfo.dir}).`);
+      if (noOpen) console.log(`Not opening a window. Open this one-time link: ${url}`);
       else {
-        console.log(`Opening ${url}`);
+        console.log('Opening it in your browser.');
         openDefaultBrowser(url);
       }
       process.exit(0);
@@ -750,20 +814,31 @@ if (isMain) {
       store = createStore(demoDir);
       seedDemo(store);
     } else {
-      store = createStore(resolveDataDir());
+      store = createStore(dataInfo.dir);
+      const fresh = !fs.existsSync(dataInfo.dir);
       store.ensure();
-      store.harden();
+      if (!fresh) store.checkExposure(); // a folder that was already there is not rewritten, only reported on
     }
   } catch (e) {
-    console.error(`Jobs Express cannot use its data folder (${demo ? demoDir : resolveDataDir()}): ${e.code || e.message}. Pick a folder you can write to, for example: set CJA_DATA_DIR=C:\\Users\\you\\JobsExpressData`);
+    console.error(`Jobs Express cannot use its data folder (${demo ? demoDir : dataInfo.dir}): ${e.code || e.message}. Pick a folder you can write to, for example: set CJA_DATA_DIR=C:\\Users\\you\\JobsExpressData`);
     process.exit(1);
   }
 
-  const app = createApp({ store, demo });
+  let rotateLaunchCode = () => {};
+  const app = createApp({ store, demo, onLaunch: () => rotateLaunchCode() });
   const port = await listenOnFreePort(app, wantedPort);
-  const url = `http://127.0.0.1:${port}/${demo ? '?demo=1' : ''}`;
+  const launchFile = demo ? null : path.join(store.dataDir, LAUNCH_FILE);
+  rotateLaunchCode = () => {
+    if (!launchFile) return;
+    try { fs.writeFileSync(launchFile, JSON.stringify({ port, pid: process.pid, code: app.issueLaunchCode() }), { mode: 0o600 }); } catch { /* second launches will just report that it is running */ }
+  };
+  rotateLaunchCode();
+  // The browser opens on a one-time link. Anything else that asks for the page (another program, another user) gets
+  // a page with no access.
+  const url = `http://127.0.0.1:${port}/?launch=${app.issueLaunchCode()}${demo ? '&demo=1' : ''}`;
   console.log(`\n  Jobs Express ${VERSION}${demo ? '  (demo mode, sample data)' : ''}`);
   console.log(`  Running at ${url}`);
+  console.log('  (That link works once, for the window that opens now.)');
   console.log(`  Your data stays in: ${demo ? '(nothing is saved in demo mode)' : store.dataDir}`);
   console.log('  Press Ctrl+C to stop.\n');
   if (!noOpen) openDefaultBrowser(url);
@@ -776,6 +851,8 @@ if (isMain) {
     leaving = true;
     try { app.runner.killAllSync?.(); } catch { /* best effort */ }
     if (demoDir) { try { fs.rmSync(demoDir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ } }
+    try { app.cleanupDemo?.(); } catch { /* best effort */ }
+    if (launchFile) { try { if (readLaunchFile(store.dataDir)?.pid === process.pid) fs.rmSync(launchFile, { force: true }); } catch { /* best effort */ } }
   };
   const shutdown = async () => {
     app.runner.stop?.('The app is closing.');

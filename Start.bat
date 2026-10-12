@@ -2,6 +2,8 @@
 setlocal EnableExtensions
 title Jobs Express
 cd /d "%~dp0"
+rem Do not let a node.bat or node.exe in this folder win over the real Node.js.
+set "NoDefaultCurrentDirectoryInExePath=1"
 
 echo.
 echo   Jobs Express

@@ -26,7 +26,7 @@ const env = { ...process.env };
 delete env.CJA_GUARD_SPEC;
 
 const isWin = process.platform === 'win32';
-const child = spawn(spec.command, spec.args, { stdio: 'inherit', env, shell: !!spec.shell, windowsHide: true });
+const child = spawn(spec.command, spec.args, { stdio: 'inherit', env, shell: !!spec.shell, windowsVerbatimArguments: !!spec.verbatim, windowsHide: true });
 
 function killChild() {
   if (child.pid == null || child.exitCode !== null) return;
